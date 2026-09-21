@@ -312,8 +312,9 @@ def test_concurrent_last_owner_preserves_one(login, seeded, create_user, admin_e
 def test_domain_rejects_invalid_scope_action_missing_role_and_future_role(seeded):
     actor = actor_for(seeded)
     args = {"action": "create", "organization_id": seeded["org_a"], "target_user_id": uuid4()}
-    with pytest.raises(ApplicationError, match="") as error:
+    with pytest.raises(ApplicationError, match="ORGANIZATION_NOT_FOUND") as error:
         assert_membership_change_allowed(actor, **{**args, "organization_id": seeded["org_b"]})
+    assert error.value.code == "ORGANIZATION_NOT_FOUND"
     assert error.value.status_code == 404
     with pytest.raises(ValueError):
         assert_membership_change_allowed(actor, **{**args, "action": "unknown"})

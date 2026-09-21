@@ -6,6 +6,7 @@ from collections import defaultdict
 from datetime import UTC
 
 import sqlalchemy as sa
+
 from alembic import op
 
 revision = "20260920_04"
@@ -58,7 +59,8 @@ def _backfill_audit_chain():
             if len(candidates) != 1 or candidates[0]["id"] in visited:
                 raise RuntimeError(
                     f"Audit history for organization {organization_id} has a fork, cycle or "
-                    "missing link. Preserve the records and investigate before retrying revision 04."
+                    "missing link. Preserve the records and investigate before retrying "
+                    "revision 04."
                 )
             row = candidates[0]
             version = next(
@@ -83,8 +85,15 @@ def _backfill_audit_chain():
 
 def _converge_defaults():
     uuid_tables = (
-        "users", "organizations", "permissions", "roles", "memberships", "sessions",
-        "account_recovery_tokens", "security_audit_events", "outbox_events",
+        "users",
+        "organizations",
+        "permissions",
+        "roles",
+        "memberships",
+        "sessions",
+        "account_recovery_tokens",
+        "security_audit_events",
+        "outbox_events",
     )
     for table in uuid_tables:
         op.execute(f"ALTER TABLE {table} ALTER COLUMN id SET DEFAULT gen_random_uuid()")
@@ -128,12 +137,14 @@ def upgrade() -> None:
                 "no records have been removed."
             )
         op.execute(f"ALTER TABLE {table} ALTER COLUMN organization_id SET NOT NULL")
-    invalid_sessions = bind.scalar(sa.text(
-        "SELECT count(*) FROM sessions s LEFT JOIN memberships m ON m.id=s.membership_id "
-        "WHERE (s.membership_id IS NULL AND s.revoked_at IS NULL) OR "
-        "(s.membership_id IS NOT NULL AND (m.id IS NULL OR m.user_id<>s.user_id "
-        "OR m.organization_id<>s.organization_id))"
-    ))
+    invalid_sessions = bind.scalar(
+        sa.text(
+            "SELECT count(*) FROM sessions s LEFT JOIN memberships m ON m.id=s.membership_id "
+            "WHERE (s.membership_id IS NULL AND s.revoked_at IS NULL) OR "
+            "(s.membership_id IS NOT NULL AND (m.id IS NULL OR m.user_id<>s.user_id "
+            "OR m.organization_id<>s.organization_id))"
+        )
+    )
     if invalid_sessions:
         raise RuntimeError(
             "Historical sessions have inconsistent membership bindings. Investigate and revoke "
@@ -198,8 +209,10 @@ def upgrade() -> None:
         CREATE OR REPLACE FUNCTION enforce_session_membership() RETURNS trigger
         LANGUAGE plpgsql SECURITY DEFINER SET search_path = pg_catalog, public AS $$
         BEGIN
-          IF NEW.organization_id::text IS DISTINCT FROM current_setting('app.organization_id', true) THEN
-            RAISE EXCEPTION 'session organization context is inconsistent' USING ERRCODE = '23514';
+          IF NEW.organization_id::text IS DISTINCT FROM
+             current_setting('app.organization_id', true) THEN
+            RAISE EXCEPTION 'session organization context is inconsistent'
+              USING ERRCODE = '23514';
           END IF;
           PERFORM pg_advisory_xact_lock(hashtextextended(NEW.organization_id::text, 1));
           PERFORM 1 FROM public.memberships m
@@ -245,7 +258,8 @@ def upgrade() -> None:
             REVOKE UPDATE ON password_credentials, sessions, account_recovery_tokens
               FROM sentinelai_runtime;
             GRANT UPDATE (password_hash, changed_at) ON password_credentials TO sentinelai_runtime;
-            GRANT UPDATE (revoked_at, last_seen_at, idle_expires_at) ON sessions TO sentinelai_runtime;
+            GRANT UPDATE (revoked_at, last_seen_at, idle_expires_at)
+              ON sessions TO sentinelai_runtime;
             GRANT UPDATE (consumed_at) ON account_recovery_tokens TO sentinelai_runtime;
             REVOKE CREATE ON SCHEMA public FROM PUBLIC, sentinelai_runtime;
           END IF;
