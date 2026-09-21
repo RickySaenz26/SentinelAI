@@ -1,0 +1,18 @@
+services:
+  frontend:
+    ports:
+      - "127.0.0.1:${SMOKE_HTTPS_PORT:?Set SMOKE_HTTPS_PORT}:8443"
+    volumes:
+      - ./docker/Caddyfile.smoke:/etc/caddy/Caddyfile:ro
+
+networks:
+  edge:
+    name: ${SMOKE_PROJECT_NAME:?Set SMOKE_PROJECT_NAME}-edge
+  service:
+    name: ${SMOKE_PROJECT_NAME:?Set SMOKE_PROJECT_NAME}-service
+
+volumes:
+  postgres-data:
+    name: ${SMOKE_PROJECT_NAME:?Set SMOKE_PROJECT_NAME}-postgres-data
+  redis-data:
+    name: ${SMOKE_PROJECT_NAME:?Set SMOKE_PROJECT_NAME}-redis-data
