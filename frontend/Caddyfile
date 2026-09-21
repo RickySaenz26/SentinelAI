@@ -1,0 +1,28 @@
+{
+	admin off
+	auto_https off
+}
+
+:8080 {
+	encode zstd gzip
+
+	header {
+		-Server
+		X-Content-Type-Options "nosniff"
+		X-Frame-Options "DENY"
+		Referrer-Policy "strict-origin-when-cross-origin"
+		Permissions-Policy "geolocation=(), microphone=(), camera=()"
+		Content-Security-Policy "default-src 'self'; base-uri 'self'; connect-src 'self'; font-src 'self' data:; form-action 'self'; frame-ancestors 'none'; img-src 'self' data:; object-src 'none'; script-src 'self'; style-src 'self'; upgrade-insecure-requests"
+	}
+
+	@api path /api/*
+	handle @api {
+		reverse_proxy backend:8000
+	}
+
+	handle {
+		root * /usr/share/caddy
+		try_files {path} /index.html
+		file_server
+	}
+}

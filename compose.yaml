@@ -1,0 +1,142 @@
+name: sentinelai-closure
+
+services:
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    image: sentinelai-closure-frontend:local
+    restart: unless-stopped
+    depends_on:
+      backend:
+        condition: service_healthy
+    ports:
+      - "127.0.0.1:${FRONTEND_PORT:-8083}:8080"
+    networks:
+      - edge
+      - service
+    read_only: true
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,size=16m,uid=10001,gid=10001
+      - /config:rw,noexec,nosuid,size=16m,uid=10001,gid=10001
+      - /data:rw,noexec,nosuid,size=16m,uid=10001,gid=10001
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    pids_limit: 100
+    mem_limit: 256m
+    cpus: "0.50"
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    image: sentinelai-closure-backend:local
+    restart: unless-stopped
+    environment:
+      ENVIRONMENT: ${ENVIRONMENT:-development}
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
+      CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:8083,http://127.0.0.1:8083}
+      TRUSTED_ORIGINS: ${TRUSTED_ORIGINS:-http://localhost:8083,http://127.0.0.1:8083}
+      CSRF_HEADER_NAME: ${CSRF_HEADER_NAME:-X-CSRF-Token}
+      DATABASE_URL: postgresql+psycopg://${POSTGRES_RUNTIME_USER:?Set POSTGRES_RUNTIME_USER in .env}:${POSTGRES_RUNTIME_PASSWORD:?Set POSTGRES_RUNTIME_PASSWORD in .env}@postgres:5432/${POSTGRES_DB:?Set POSTGRES_DB in .env}
+    depends_on:
+      migrations:
+        condition: service_completed_successfully
+      redis:
+        condition: service_healthy
+    networks:
+      - service
+    read_only: true
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,size=16m,uid=10001,gid=10001
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    pids_limit: 150
+    mem_limit: 256m
+    cpus: "0.75"
+
+  migrations:
+    image: sentinelai-closure-backend:local
+    restart: "no"
+    command: ["alembic", "upgrade", "head"]
+    environment:
+      DATABASE_URL: postgresql+psycopg://${POSTGRES_USER:?Set POSTGRES_USER in .env}:${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}@postgres:5432/${POSTGRES_DB:?Set POSTGRES_DB in .env}
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - service
+    read_only: true
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,size=16m,uid=10001,gid=10001
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    pids_limit: 100
+    mem_limit: 256m
+    cpus: "0.50"
+
+  postgres:
+    image: postgres:17.6-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:?Set POSTGRES_DB in .env}
+      POSTGRES_USER: ${POSTGRES_USER:?Set POSTGRES_USER in .env}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}
+      POSTGRES_RUNTIME_PASSWORD: ${POSTGRES_RUNTIME_PASSWORD:?Set POSTGRES_RUNTIME_PASSWORD in .env}
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+      - ./docker/postgres-init:/docker-entrypoint-initdb.d:ro
+    networks:
+      - service
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
+    security_opt:
+      - no-new-privileges:true
+    pids_limit: 200
+    mem_limit: 512m
+    cpus: "1.00"
+
+  redis:
+    image: redis:8.4.6-alpine
+    restart: unless-stopped
+    environment:
+      REDIS_PASSWORD: ${REDIS_PASSWORD:?Set REDIS_PASSWORD in .env}
+    command: ["redis-server", "--appendonly", "yes", "--requirepass", "${REDIS_PASSWORD:?Set REDIS_PASSWORD in .env}"]
+    volumes:
+      - redis-data:/data
+    networks:
+      - service
+    healthcheck:
+      test: ["CMD-SHELL", "redis-cli --no-auth-warning -a \"$$REDIS_PASSWORD\" ping | grep -qx PONG"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 5s
+    security_opt:
+      - no-new-privileges:true
+    pids_limit: 100
+    mem_limit: 256m
+    cpus: "0.50"
+
+networks:
+  edge:
+    name: sentinelai-closure-edge
+  service:
+    name: sentinelai-closure-service
+    internal: true
+
+volumes:
+  postgres-data:
+    name: sentinelai-closure-postgres-data
+  redis-data:
+    name: sentinelai-closure-redis-data

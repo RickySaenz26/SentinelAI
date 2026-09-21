@@ -1,0 +1,95 @@
+name: Continuous Integration
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main, develop]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  frontend:
+    name: Frontend quality gate
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+      - name: Enable pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 12.4.1
+      - name: Configure Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+          cache-dependency-path: frontend/pnpm-lock.yaml
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+      - name: Lint
+        run: pnpm lint
+      - name: Typecheck
+        run: pnpm typecheck
+      - name: Build
+        run: pnpm build
+      - name: Audit production dependencies
+        run: pnpm audit --prod --audit-level=high
+
+  backend:
+    name: Backend quality gate
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+      - name: Complete backend gate with ephemeral PostgreSQL
+        shell: pwsh
+        run: ./scripts/backend-quality.ps1
+        # The shared gate requires formatting, lint, pytest/branch coverage >=90%,
+        # migration convergence, RLS/grants/triggers, concurrent API contracts,
+        # pip-audit and the repository secret scan. Failure propagates to CI.
+
+  repository-security:
+    name: Repository security gate
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout full history
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Scan high-confidence secret patterns
+        run: python scripts/secret_scan.py .
+
+  container-platform:
+    name: Container platform gate
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+      - name: Prepare local-only Compose configuration
+        shell: pwsh
+        run: Copy-Item -LiteralPath .env.example -Destination .env
+      - name: Validate Docker Compose configuration
+        run: docker compose config --quiet
+      - name: Build runtime images
+        run: docker compose build backend frontend
+      - name: Start local platform
+        run: docker compose up --detach
+      - name: Verify service healthchecks and HTTP endpoints
+        shell: pwsh
+        run: ./scripts/docker-verify.ps1 -TimeoutSeconds 180
+      - name: Collect container logs on failure
+        if: failure()
+        run: docker compose logs --no-color --tail 100
+      - name: Stop local platform
+        if: always()
+        run: docker compose down

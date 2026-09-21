@@ -1,0 +1,48 @@
+services:
+  postgres:
+    image: postgres:17.6-alpine
+    environment:
+      POSTGRES_DB: closure_test
+      POSTGRES_USER: sentinelai_migrator
+      POSTGRES_PASSWORD: ephemeral-test-only
+      POSTGRES_RUNTIME_PASSWORD: ephemeral-test-only
+    tmpfs:
+      - /var/lib/postgresql/data:rw,nosuid,size=512m
+    volumes:
+      - ./docker/postgres-init:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U sentinelai_migrator -d closure_test"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+    networks: [quality]
+  quality:
+    build:
+      context: ./backend
+      target: quality
+    image: sentinelai-closure-quality:local
+    environment:
+      ENVIRONMENT: test
+      DATABASE_URL: postgresql+psycopg://sentinelai_runtime:ephemeral-test-only@postgres:5432/closure_test
+      TEST_ADMIN_DATABASE_URL: postgresql+psycopg://sentinelai_migrator:ephemeral-test-only@postgres:5432/closure_test
+      CORS_ORIGINS: https://testserver
+      TRUSTED_ORIGINS: https://testserver
+      CSRF_HEADER_NAME: X-Closure-CSRF
+      COVERAGE_FILE: /tmp/.coverage
+      XDG_CACHE_HOME: /tmp/cache
+      RUFF_CACHE_DIR: /tmp/ruff
+      PIP_DISABLE_PIP_VERSION_CHECK: "1"
+    command: ["python", "quality_gate.py"]
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks: [quality]
+    read_only: true
+    tmpfs:
+      - /tmp:rw,exec,nosuid,size=512m,uid=10001,gid=10001
+    security_opt: ["no-new-privileges:true"]
+    cap_drop: [ALL]
+# Test-only bridge allows advisory database access and outbound dependency auditing.
+# No host ports or persistent volumes are used.
+networks:
+  quality: {}

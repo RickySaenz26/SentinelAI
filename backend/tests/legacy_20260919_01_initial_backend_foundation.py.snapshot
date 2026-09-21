@@ -1,0 +1,125 @@
+"""Initial identity, tenancy, audit, and outbox schema with tenant RLS."""
+
+from alembic import op
+
+from app.platform.database.models import Base
+
+revision = "20260919_01"
+down_revision = None
+branch_labels = None
+depends_on = None
+
+SYSTEM_ROLES = {
+    "platform_admin": ["platform:admin"],
+    "org_owner": [
+        "organization:read",
+        "organization:update",
+        "membership:read",
+        "membership:invite",
+        "membership:update",
+        "membership:revoke",
+        "role:read",
+        "role:assign",
+        "security_audit:read",
+    ],
+    "security_manager": [
+        "organization:read",
+        "membership:read",
+        "membership:invite",
+        "membership:update",
+        "membership:revoke",
+        "role:read",
+        "security_audit:read",
+    ],
+    "analyst": ["organization:read", "role:read"],
+    "viewer": ["organization:read", "role:read"],
+    "auditor": ["organization:read", "membership:read", "role:read", "security_audit:read"],
+}
+
+PERMISSIONS = (
+    "organization:read",
+    "organization:update",
+    "membership:read",
+    "membership:invite",
+    "membership:update",
+    "membership:revoke",
+    "role:read",
+    "role:assign",
+    "security_audit:read",
+    "platform:admin",
+)
+
+RLS_TABLES = ("organizations", "roles", "memberships", "security_audit_events", "outbox_events")
+
+
+def upgrade() -> None:
+    bind = op.get_bind()
+    bind.exec_driver_sql("CREATE EXTENSION IF NOT EXISTS pgcrypto")
+    Base.metadata.create_all(bind=bind)
+
+    for permission in PERMISSIONS:
+        resource, action = permission.split(":", maxsplit=1)
+        bind.exec_driver_sql(
+            """
+            INSERT INTO permissions (id, code, resource, action)
+            VALUES (gen_random_uuid(), %s, %s, %s)
+            ON CONFLICT (code) DO NOTHING
+            """,
+            (permission, resource, action),
+        )
+
+    for role, permissions in SYSTEM_ROLES.items():
+        bind.exec_driver_sql(
+            """
+            INSERT INTO roles (id, organization_id, code, name, is_system, created_at)
+            VALUES (gen_random_uuid(), NULL, %s, %s, true, now())
+            ON CONFLICT DO NOTHING
+            """,
+            (role, role.replace("_", " ").title()),
+        )
+        for permission in permissions:
+            bind.exec_driver_sql(
+                """
+                INSERT INTO role_permissions (role_id, permission_id)
+                SELECT roles.id, permissions.id FROM roles CROSS JOIN permissions
+                WHERE roles.code = %s AND roles.organization_id IS NULL AND permissions.code = %s
+                ON CONFLICT DO NOTHING
+                """,
+                (role, permission),
+            )
+
+    for table in RLS_TABLES:
+        bind.exec_driver_sql(f"ALTER TABLE {table} ENABLE ROW LEVEL SECURITY")
+        bind.exec_driver_sql(f"ALTER TABLE {table} FORCE ROW LEVEL SECURITY")
+        if table == "organizations":
+            expression = "id::text = current_setting('app.organization_id', true)"
+        elif table == "roles":
+            expression = "organization_id IS NULL OR organization_id::text = current_setting('app.organization_id', true)"
+        else:
+            expression = "organization_id::text = current_setting('app.organization_id', true)"
+        bind.exec_driver_sql(
+            f"CREATE POLICY {table}_tenant_isolation ON {table} "
+            f"USING ({expression}) WITH CHECK ({expression})"
+        )
+
+    bind.exec_driver_sql(
+        """
+        DO $$
+        BEGIN
+            IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'sentinelai_runtime') THEN
+                GRANT USAGE ON SCHEMA public TO sentinelai_runtime;
+                GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA public TO sentinelai_runtime;
+                REVOKE UPDATE, DELETE ON security_audit_events FROM sentinelai_runtime;
+                GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA public TO sentinelai_runtime;
+            END IF;
+        END
+        $$;
+        """
+    )
+
+
+def downgrade() -> None:
+    bind = op.get_bind()
+    for table in RLS_TABLES:
+        bind.exec_driver_sql(f"DROP POLICY IF EXISTS {table}_tenant_isolation ON {table}")
+    Base.metadata.drop_all(bind=bind)

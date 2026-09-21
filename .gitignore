@@ -1,1 +1,53 @@
+# Dependencies
+node_modules/
+**/node_modules/
 
+# Build outputs
+dist/
+build/
+**/dist/
+**/build/
+
+# Environment variables (nunca subir secretos/API keys)
+.env
+.env.local
+.env.*.local
+**/.env
+**/.env.local
+
+# Logs
+*.log
+npm-debug.log*
+pnpm-debug.log*
+
+# Editor/IDE
+.vscode/
+.idea/
+*.swp
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Vite cache
+**/.vite/
+
+# Python (backend futuro)
+__pycache__/
+*.pyc
+.venv/
+venv/
+
+# Testing
+coverage/
+.coverage
+htmlcov/
+.pytest_cache/
+.ruff_cache/
+
+# Python packaging and type-checking
+*.egg-info/
+.mypy_cache/
+
+# Local audit artifacts
+audit-results/
