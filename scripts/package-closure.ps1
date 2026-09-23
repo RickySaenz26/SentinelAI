@@ -1,6 +1,12 @@
 [CmdletBinding()]
-param()
+param(
+    [ValidatePattern('^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$')]
+    [string]$ArtifactBaseName = 'SentinelAI-Sprint-1B.1-Closure-Final-20260923'
+)
 $ErrorActionPreference = 'Stop'
+if ($ArtifactBaseName.EndsWith('.zip', [StringComparison]::OrdinalIgnoreCase)) {
+    throw 'ArtifactBaseName must not include the .zip extension.'
+}
 $RepositoryRoot = (Resolve-Path -LiteralPath (Split-Path -Parent $PSScriptRoot)).Path
 $CanonicalRepositoryRoot = [IO.Path]::GetFullPath('C:\SentinelAI\platform').TrimEnd('\')
 $LegacyWorkspaceName = 'SentinelAI-Sprint-1B.1-Closure-Candidate'
@@ -43,7 +49,7 @@ $RecoveryCheckpoint = '40fad40cf90664a8744ce2036a522cf02e9e5b27'
 if ($LASTEXITCODE -ne 0) {
     throw 'Current HEAD does not descend from the approved Sprint 1B.1 recovery checkpoint.'
 }
-$ArchivePath = Join-Path (Split-Path -Parent $RepositoryRoot) 'SentinelAI-Sprint-1B.1-Closure-Candidate.zip'
+$ArchivePath = Join-Path (Split-Path -Parent $RepositoryRoot) "$ArtifactBaseName.zip"
 if (Test-Path -LiteralPath $ArchivePath) {
     throw 'Archive already exists. Preserve or rename it explicitly before packaging again.'
 }
@@ -65,7 +71,7 @@ $archive = [IO.Compression.ZipFile]::Open($ArchivePath, [IO.Compression.ZipArchi
 try {
     foreach ($file in ($Files | Sort-Object FullName)) {
         $relative = [IO.Path]::GetRelativePath($RepositoryRoot, $file.FullName).Replace('\', '/')
-        $entry = 'SentinelAI-Sprint-1B.1-Closure-Candidate/' + $relative
+        $entry = "$ArtifactBaseName/" + $relative
         [IO.Compression.ZipFileExtensions]::CreateEntryFromFile(
             $archive, $file.FullName, $entry, [IO.Compression.CompressionLevel]::Optimal) | Out-Null
     }

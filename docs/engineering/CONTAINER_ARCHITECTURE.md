@@ -1,8 +1,8 @@
-# Arquitectura de contenedores — Sprint 1B.1 Closure Candidate
+# Arquitectura de contenedores — Sprint 1B.1 Closure
 
-Workspace operativo: `C:\SentinelAI\SentinelAI-Sprint-1B.1-Closure-Candidate`.
+Workspace operativo: `C:\SentinelAI\platform`.
 Los comandos vigentes están en
-[SPRINT_1B_1_COMMANDS_POWERSHELL.md](SPRINT_1B_1_COMMANDS_POWERSHELL.md).
+[SPRINT_1B_OPERATIONS.md](SPRINT_1B_OPERATIONS.md).
 
 ## Alcance
 

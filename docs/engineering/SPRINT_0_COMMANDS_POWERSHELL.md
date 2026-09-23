@@ -3,10 +3,10 @@
 La operación actual corresponde a Sprint 1B.1 Closure Candidate. Los comandos de
 Sprint 0 dependían de un backend sin PostgreSQL y ya no representan la suite
 vigente. La guía completa es
-[SPRINT_1B_1_COMMANDS_POWERSHELL.md](SPRINT_1B_1_COMMANDS_POWERSHELL.md).
+[SPRINT_1B_OPERATIONS.md](SPRINT_1B_OPERATIONS.md).
 
 ```powershell
-Set-Location "C:\SentinelAI\SentinelAI-Sprint-1B.1-Closure-Candidate"
+Set-Location "C:\SentinelAI\platform"
 if (-not (Test-Path -LiteralPath '.env')) {
     Copy-Item -LiteralPath '.env.example' -Destination '.env'
 }
@@ -24,7 +24,7 @@ del usuario.
 Para verificar el frontend por separado:
 
 ```powershell
-Set-Location "C:\SentinelAI\SentinelAI-Sprint-1B.1-Closure-Candidate\frontend"
+Set-Location "C:\SentinelAI\platform\frontend"
 pnpm install --frozen-lockfile
 if ($LASTEXITCODE -ne 0) { throw 'Instalación frontend fallida.' }
 pnpm lint

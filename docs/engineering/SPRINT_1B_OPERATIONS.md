@@ -1,13 +1,29 @@
-# Operación — Sprint 1B.1 Closure Candidate
+# Operación — Sprint 1B.1 Closure
 
-Workspace: `C:\SentinelAI\SentinelAI-Sprint-1B.1-Closure-Candidate`.
-Comandos: `SPRINT_1B_1_COMMANDS_POWERSHELL.md`. Sustituye las instrucciones
-antiguas de arranque para este candidato.
+Repositorio canónico: `C:\SentinelAI\platform`.
+Esta guía sustituye las instrucciones antiguas de arranque para el cierre actual.
+
+## Inicio y gates de cierre
+
+```powershell
+Set-Location "C:\SentinelAI\platform"
+if (-not (Test-Path -LiteralPath '.env')) {
+    Copy-Item -LiteralPath '.env.example' -Destination '.env'
+}
+docker compose config --quiet
+.\scripts\backend-quality.ps1
+.\scripts\authenticated-compose-smoke.ps1
+```
+
+`backend-quality.ps1` usa PostgreSQL efímero en `tmpfs`; no opera sobre la base
+persistente local. `authenticated-compose-smoke.ps1` crea un proyecto Compose
+aleatorio, HTTPS con CA efímera, credenciales aleatorias solo en memoria y elimina
+sus contenedores, redes y volúmenes al finalizar.
 
 ## Operación y credenciales
 
 Solo desarrollo local sin registro público. Frontend con mocks. El proyecto
-sentinelai-closure usa puerto8083 y volúmenes propios. Se detiene con
+sentinelai-closure usa puerto 8083 y volúmenes propios. Se detiene con
 `docker compose down`, sin eliminar datos.
 
 Bootstrap/onboarding se ejecutan en terminal confiable con entrada oculta de
@@ -28,7 +44,11 @@ CSRF_HEADER_NAME (default X-CSRF-Token) se resuelve al iniciar proceso. Cambiarl
 requiere reinicio. Mismo valor en CORS/OpenAPI/auth. Toda mutación autenticada
 requiere CSRF válido; Origin presente debe estar en TRUSTED_ORIGINS. CORS incluye
 If-Match. No existe excepción HTTP insegura: integrar navegador requiere TLS.
-Las pruebas usan HTTPS in-process sin desactivar Secure, CSRF ni RLS.
+Las pruebas unitarias/integración usan HTTPS in-process sin desactivar Secure,
+CSRF ni RLS. El smoke de aceptación usa el stack Compose desplegado con HTTPS.
+La identidad temporal `platform_admin` usada por ese smoke existe únicamente en
+el entorno efímero, se destruye con él, no persiste credenciales operacionales y
+no es una recomendación de onboarding para producción.
 
 ## Orden de locks
 
@@ -46,15 +66,15 @@ revisión propia de orden/transacciones.
 ## Outbox e idempotencia
 
 No hay soporte de replay ni Idempotency-Key HTTP. If-Match protege PATCH/DELETE:
-retry después de éxito devuelve409, no otro evento. POST duplicado devuelve409.
-Claves internas de1–128 ASCII seguros, scoped por organización:
+retry después de éxito devuelve 409, no otro evento. POST duplicado devuelve 409.
+Claves internas de 1–128 ASCII seguros, scoped por organización:
 org.updated:ID:version; membership.created/updated/revoked:ID:version;
 managed_user.created:user:1; session.login:session; session.rotated/logout:oldSession;
 organization.activated:oldSession; recovery.requested/completed:recoveryID;
 platform.bootstrap:organization. No incluyen contraseñas, tokens ni correo.
 
 Reemitir misma clave/contenido devuelve el evento existente; diferente contenido
-produce409 IDEMPOTENCY_CONFLICT. Mutación/audit/outbox comparten transacción.
+produce 409 IDEMPOTENCY_CONFLICT. Mutación/audit/outbox comparten transacción.
 La unicidad de outbox no convierte todos los endpoints en idempotentes HTTP.
 Sin publisher ni workers.
 
@@ -84,7 +104,7 @@ hashes y garantías originales: NO protección retroactiva de campos antes no fi
 Hash chain local no resiste a un administrador DB que reescriba toda la historia;
 anclaje externo/retención inmutable pendientes.
 
-Recovery devuelve202 no enumerativo y nunca imprime/devuelve tokens. Adaptador de
+Recovery devuelve 202 no enumerativo y nunca imprime/devuelve tokens. Adaptador de
 pruebas in-process solo ENVIRONMENT=test; no existe delivery real. Rate limiting
 en memoria no es distribuido; se requiere revisar IP/proxy antes de exposición.
 Son límites de foundation local, no autorización para producción.

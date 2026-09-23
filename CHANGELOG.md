@@ -4,7 +4,7 @@ Todos los cambios relevantes se documentarán aquí.
 
 ## [Unreleased]
 
-### Sprint 1B.1 Closure Candidate — 2026-09-20
+### Sprint 1B.1 Closure Passes A–C — 2026-09-23
 
 - Política central valida actor, acción, rol actual/propuesto, tenant e identidad.
 - Defensa PostgreSQL de bootstrap único y platform_admin inmutable; runtime mínimo.
@@ -15,9 +15,14 @@ Todos los cambios relevantes se documentarán aquí.
 - CSRF configurable coherente con CORS/OpenAPI/auth, e If-Match en preflight.
 - Revalidación de login/expiración tras locks y serialización multi-organización.
 - CLI allowlist cerrado y pruebas de bootstrap/onboarding/repetición/rollback.
-- Smoke convertido a pytest; contratos reales, RLS, grants y concurrencia.
+- Suite de 229 pruebas con cobertura de statements 99.47% y ramas 97.17%.
+- Convergencia de migraciones limpia/histórica y grants automatizada en PostgreSQL.
+- Smoke autenticado HTTPS del stack Compose desplegado, con flujos positivos,
+  negativos, RLS runtime, auditoría y limpieza efímera.
 - Quality autocontenido no root con PostgreSQL tmpfs y CI/gate PowerShell obligatorios.
-- Documentación y paquete de cierre; fuentes anteriores intactas.
+- Ruff, pip-audit y secret scan incorporados al cierre sin reducir umbrales.
+- Documentación, handoff y empaquetado sanitizado de cierre; evidencia histórica
+  preservada. El cierre valida la foundation, no declara el producto production-ready.
 
 ### Added
 

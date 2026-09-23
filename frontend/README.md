@@ -7,7 +7,7 @@ backend y no integra scanners, trabajos, IA ni nuevas funciones del frontend.
 ## Verificación local
 
 ```powershell
-Set-Location "C:\SentinelAI\SentinelAI-Sprint-1B.1-Closure-Candidate\frontend"
+Set-Location "C:\SentinelAI\platform\frontend"
 pnpm install --frozen-lockfile
 if ($LASTEXITCODE -ne 0) { throw 'Instalación fallida.' }
 pnpm lint
@@ -27,14 +27,14 @@ backend y mantiene fallback a `index.html` para rutas de cliente.
 Para levantar el stack o ejecutar gates backend desde la raíz:
 
 ```powershell
-Set-Location "C:\SentinelAI\SentinelAI-Sprint-1B.1-Closure-Candidate"
+Set-Location "C:\SentinelAI\platform"
 .\scripts\docker-up.ps1 -Build
 .\scripts\docker-verify.ps1
 .\scripts\backend-quality.ps1
 if ($LASTEXITCODE -ne 0) { throw 'Backend quality no aprobado.' }
 ```
 
-La [guía PowerShell vigente](../docs/engineering/SPRINT_1B_1_COMMANDS_POWERSHELL.md)
+La [guía PowerShell vigente](../docs/engineering/SPRINT_1B_OPERATIONS.md)
 incluye configuración inicial de `.env`, migraciones y operación. Los gates
 backend usan PostgreSQL efímero; las cookies de sesión conservan sus flags de
 seguridad y las pruebas de autenticación usan un cliente HTTPS.

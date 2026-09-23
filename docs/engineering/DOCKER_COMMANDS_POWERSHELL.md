@@ -1,6 +1,6 @@
-# Docker en Windows PowerShell — Sprint 1B.1 Closure Candidate
+# Docker en Windows PowerShell — Sprint 1B.1 Closure
 
-La guía operativa vigente es [SPRINT_1B_1_COMMANDS_POWERSHELL.md](SPRINT_1B_1_COMMANDS_POWERSHELL.md).
+La guía operativa vigente es [SPRINT_1B_OPERATIONS.md](SPRINT_1B_OPERATIONS.md).
 Este resumen utiliza el proyecto Compose aislado `sentinelai-closure`.
 
 ## Inicio local
@@ -9,7 +9,7 @@ Requiere Docker Desktop iniciado con contenedores Linux y PowerShell. La copia
 de `.env` se crea solamente si todavía no existe.
 
 ```powershell
-Set-Location "C:\SentinelAI\SentinelAI-Sprint-1B.1-Closure-Candidate"
+Set-Location "C:\SentinelAI\platform"
 if (-not (Test-Path -LiteralPath '.env')) {
     Copy-Item -LiteralPath '.env.example' -Destination '.env'
 }
@@ -30,7 +30,7 @@ de autenticación. Las pruebas de contrato utilizan un cliente HTTPS.
 ## Operación y verificación
 
 ```powershell
-Set-Location "C:\SentinelAI\SentinelAI-Sprint-1B.1-Closure-Candidate"
+Set-Location "C:\SentinelAI\platform"
 .\scripts\docker-build.ps1 -NoCache
 .\scripts\docker-up.ps1 -Build
 .\scripts\docker-logs.ps1 -Tail 100

@@ -1,5 +1,10 @@
 # Handoff para ChatGPT Work — SentinelAI Sprint 1B
 
+> Evidencia histórica de la entrega Sprint 1B original. Sus rutas, limitaciones y
+> resultados describen la ejecución del 2026-09-19 y no representan el cierre
+> vigente. Para el estado actual consulte
+> [WORK_HANDOFF_SPRINT_1B1_CLOSURE.md](WORK_HANDOFF_SPRINT_1B1_CLOSURE.md).
+
 ## Contexto y autoridad
 
 Codex implementó el Sprint 1B en una copia aislada. El prompt maestro y la baseline de diseño se preservaron como autoridad funcional. No se modificó la copia fuente de Sprint 1A.

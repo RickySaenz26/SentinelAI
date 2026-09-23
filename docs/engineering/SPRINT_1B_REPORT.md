@@ -1,5 +1,11 @@
 # Sprint 1B — Backend Foundation Report
 
+> Historical evidence recorded on 2026-09-19. The limitations and paths in this
+> report describe the original Sprint 1B execution and were not silently rewritten.
+> Current closure evidence is in
+> [WORK_HANDOFF_SPRINT_1B1_CLOSURE.md](../../WORK_HANDOFF_SPRINT_1B1_CLOSURE.md)
+> and [SPRINT_1B1_REMEDIATION_REPORT.md](SPRINT_1B1_REMEDIATION_REPORT.md).
+
 ## Scope delivered
 
 - PostgreSQL persistence with SQLAlchemy 2 and Alembic (`20260919_01`, `20260919_02`).
