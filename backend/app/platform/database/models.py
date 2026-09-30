@@ -10,6 +10,7 @@ from sqlalchemy import (
     CheckConstraint,
     DateTime,
     ForeignKey,
+    ForeignKeyConstraint,
     Index,
     Integer,
     MetaData,
@@ -271,4 +272,68 @@ class OutboxEvent(Base):
             postgresql_where=idempotency_key.is_not(None),
         ),
         Index("ix_outbox_pending", "organization_id", "published_at", "created_at"),
+    )
+
+
+class Asset(Base):
+    __tablename__ = "assets"
+
+    id: Mapped[UUID] = mapped_column(Uuid, primary_key=True, default=uuid4)
+    organization_id: Mapped[UUID] = mapped_column(ForeignKey("organizations.id"), nullable=False)
+    type: Mapped[str] = mapped_column(String(16), nullable=False, default="ipv4")
+    canonical_target: Mapped[str] = mapped_column(String(15), nullable=False)
+    display_name: Mapped[str] = mapped_column(String(160), nullable=False)
+    criticality: Mapped[str] = mapped_column(String(16), nullable=False)
+    ownership_status: Mapped[str] = mapped_column(String(16), nullable=False, default="unverified")
+    policy_hash: Mapped[str] = mapped_column(String(64), nullable=False)
+    version: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+    deleted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    archive_reason: Mapped[str | None] = mapped_column(String(500))
+
+    __table_args__ = (
+        UniqueConstraint("organization_id", "id", name="uq_assets_organization_id"),
+        Index(
+            "uq_assets_active_target",
+            "organization_id",
+            "type",
+            "canonical_target",
+            unique=True,
+            postgresql_where=deleted_at.is_(None),
+        ),
+        Index("ix_assets_page", "organization_id", "created_at", "id"),
+    )
+
+
+class HttpIdempotencyRecord(Base):
+    __tablename__ = "http_idempotency_records"
+
+    id: Mapped[UUID] = mapped_column(Uuid, primary_key=True, default=uuid4)
+    organization_id: Mapped[UUID] = mapped_column(ForeignKey("organizations.id"), nullable=False)
+    actor_id: Mapped[UUID] = mapped_column(ForeignKey("users.id"), nullable=False)
+    method: Mapped[str] = mapped_column(String(8), nullable=False)
+    route: Mapped[str] = mapped_column(String(100), nullable=False)
+    key_hash: Mapped[str] = mapped_column(String(64), nullable=False)
+    fingerprint: Mapped[str] = mapped_column(String(64), nullable=False)
+    asset_id: Mapped[UUID] = mapped_column(Uuid, nullable=False)
+    status_code: Mapped[int] = mapped_column(Integer, nullable=False)
+    response_body: Mapped[dict[str, object]] = mapped_column(JSON, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+
+    __table_args__ = (
+        UniqueConstraint(
+            "organization_id",
+            "actor_id",
+            "method",
+            "route",
+            "key_hash",
+            name="uq_http_idempotency_context",
+        ),
+        ForeignKeyConstraint(
+            ["organization_id", "asset_id"],
+            ["assets.organization_id", "assets.id"],
+            name="fk_http_idempotency_asset_tenant",
+        ),
     )

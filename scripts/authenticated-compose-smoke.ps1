@@ -2,7 +2,8 @@
 [CmdletBinding()]
 param(
     [ValidateRange(60, 300)]
-    [int]$TimeoutSeconds = 180
+    [int]$TimeoutSeconds = 180,
+    [switch]$Assets
 )
 
 $ErrorActionPreference = 'Stop'
@@ -219,6 +220,13 @@ $EnvironmentValues = @{
     CORS_ORIGINS = $TrustedOrigin
     TRUSTED_ORIGINS = $TrustedOrigin
     CSRF_HEADER_NAME = $CsrfHeaderName
+    # Synthetic inventory-only policy belongs exclusively to this disposable test.
+    # An ordinary smoke always clears inherited policy and proves default denial.
+    LAB_ASSET_POLICY_JSON = if ($Assets) {
+        @{ version = 1; allowed_targets = @('192.0.2.10', '192.0.2.12');
+           excluded_targets = @('192.0.2.12'); max_active_assets_per_tenant = 1 } |
+            ConvertTo-Json -Compress
+    } else { '' }
     POSTGRES_DB = $DatabaseName
     POSTGRES_USER = 'sentinelai_migrator'
     POSTGRES_PASSWORD = Get-RandomHex -ByteCount 32
@@ -450,6 +458,87 @@ try {
         throw 'Runtime PostgreSQL RLS/audit evidence verification failed.'
     }
     Write-Pass 'Runtime role tenant visibility, NOBYPASSRLS and audit immutability passed.'
+
+    $CurrentStage = 'laboratory asset policy and inventory'
+    $assetHeaders = @{
+        Origin = $TrustedOrigin; $CsrfHeaderName = $CsrfA
+        'Idempotency-Key' = 'smoke-asset-create'
+    }
+    $assetBody = @{
+        type = 'ipv4'; target = '192.0.2.10'; display_name = 'Synthetic inventory only'
+        criticality = 'low'
+    }
+    $response = Invoke-SmokeRequest -Client $AdminClient.Client -Method POST `
+        -Path '/api/v1/assets' -Headers $assetHeaders -Body $assetBody
+    if (-not $Assets) {
+        Assert-Status $response 403 'empty default laboratory policy'
+        Assert-ErrorCode $response 'LAB_POLICY_DENIED' 'empty default laboratory policy'
+        Write-Pass 'Empty policy rejects asset registration even for platform_admin.'
+    }
+    else {
+        Assert-Status $response 201 'synthetic asset creation'
+        $asset = $response.Body | ConvertFrom-Json
+        if ($asset.ownership_status -ne 'unverified' -or $asset.version -ne 1) {
+            throw 'Asset creation made an unexpected ownership/version claim.'
+        }
+        $assetPath = '/api/v1/assets/' + $asset.id
+        $response = Invoke-SmokeRequest -Client $AdminClient.Client -Method POST `
+            -Path '/api/v1/assets' -Headers $assetHeaders -Body $assetBody
+        Assert-Status $response 201 'asset idempotent replay'
+        if (($response.Body | ConvertFrom-Json).id -ne $asset.id) {
+            throw 'Asset replay created another asset.'
+        }
+        $response = Invoke-SmokeRequest -Client $AdminClient.Client -Method POST `
+            -Path '/api/v1/assets' -Headers $assetHeaders `
+            -Body @{ type = 'ipv4'; target = '192.0.2.12'; display_name = 'Excluded'; criticality = 'low' }
+        Assert-Status $response 403 'explicitly excluded target'
+        Assert-ErrorCode $response 'LAB_POLICY_DENIED' 'explicitly excluded target'
+        $response = Invoke-SmokeRequest -Client $ViewerClient.Client -Method GET -Path $assetPath
+        Assert-Status $response 404 'cross-tenant asset read'
+        $response = Invoke-SmokeRequest -Client $ViewerClient.Client -Method POST `
+            -Path '/api/v1/assets' -Headers @{
+                Origin = $TrustedOrigin; $CsrfHeaderName = [string]$viewerLogin.csrf_token
+                'Idempotency-Key' = 'viewer-create'
+            } -Body $assetBody
+        Assert-Status $response 403 'viewer asset creation'
+        $response = Invoke-SmokeRequest -Client $AdminClient.Client -Method PATCH `
+            -Path $assetPath -Headers @{ 'If-Match' = '1'; Origin = $TrustedOrigin } `
+            -Body @{ display_name = 'Denied without CSRF' }
+        Assert-Status $response 403 'asset CSRF rejection'
+        $assetHeaders['If-Match'] = '1'
+        $response = Invoke-SmokeRequest -Client $AdminClient.Client -Method PATCH `
+            -Path $assetPath -Headers $assetHeaders -Body @{ display_name = 'Updated inventory' }
+        Assert-Status $response 200 'asset metadata update'
+        if (($response.Body | ConvertFrom-Json).version -ne 2) { throw 'Asset version not incremented.' }
+        $response = Invoke-SmokeRequest -Client $AdminClient.Client -Method PATCH `
+            -Path $assetPath -Headers $assetHeaders -Body @{ display_name = 'Stale update' }
+        Assert-Status $response 409 'asset stale version'
+        $assetHeaders['If-Match'] = '2'
+        $assetHeaders['Idempotency-Key'] = 'smoke-asset-archive'
+        $response = Invoke-SmokeRequest -Client $AdminClient.Client -Method DELETE `
+            -Path $assetPath -Headers $assetHeaders -Body @{ reason = 'Ephemeral lab finished' }
+        Assert-Status $response 204 'asset archive'
+        $response = Invoke-SmokeRequest -Client $AdminClient.Client -Method DELETE `
+            -Path $assetPath -Headers $assetHeaders -Body @{ reason = 'Ephemeral lab finished' }
+        Assert-Status $response 204 'asset archive replay'
+        $response = Invoke-SmokeRequest -Client $AdminClient.Client -Method GET -Path '/api/v1/assets'
+        Assert-Status $response 200 'active asset listing'
+        if (@(($response.Body | ConvertFrom-Json).items).Count -ne 0) {
+            throw 'Archived asset remained in active inventory.'
+        }
+        $response = Invoke-SmokeRequest -Client $AdminClient.Client -Method GET `
+            -Path '/api/v1/security-audit-events'
+        Assert-Status $response 200 'asset audit events'
+        $actions = @(($response.Body | ConvertFrom-Json).items | Where-Object {
+            $_.resource_id -eq $asset.id
+        } | ForEach-Object { $_.action })
+        foreach ($expected in @('asset.created', 'asset.updated', 'asset.archived')) {
+            if (@($actions | Where-Object { $_ -eq $expected }).Count -ne 1) {
+                throw "Missing or duplicate asset audit action: $expected"
+            }
+        }
+        Write-Pass 'HTTPS asset create/replay/update/archive, exclusions, CSRF, RBAC and tenant isolation.'
+    }
 
     $CurrentStage = 'logout and stale-session rejection'
     $response = Invoke-SmokeRequest -Client $AdminClient.Client -Method DELETE `

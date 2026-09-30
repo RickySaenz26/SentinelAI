@@ -65,7 +65,7 @@ revisión propia de orden/transacciones.
 
 ## Outbox e idempotencia
 
-No hay soporte de replay ni Idempotency-Key HTTP. If-Match protege PATCH/DELETE:
+Los endpoints de Sprint 1B no tienen replay ni Idempotency-Key HTTP. If-Match protege PATCH/DELETE:
 retry después de éxito devuelve 409, no otro evento. POST duplicado devuelve 409.
 Claves internas de 1–128 ASCII seguros, scoped por organización:
 org.updated:ID:version; membership.created/updated/revoked:ID:version;
@@ -77,6 +77,9 @@ Reemitir misma clave/contenido devuelve el evento existente; diferente contenido
 produce 409 IDEMPOTENCY_CONFLICT. Mutación/audit/outbox comparten transacción.
 La unicidad de outbox no convierte todos los endpoints en idempotentes HTTP.
 Sin publisher ni workers.
+
+Sprint 2A incremento 1 añade replay HTTP únicamente a POST/DELETE de activos;
+no cambia los contratos de foundation. Véase [política y activos](SPRINT_2A_INCREMENT_1.md).
 
 ## RLS, privilegios y confianza
 

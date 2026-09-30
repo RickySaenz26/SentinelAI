@@ -29,6 +29,7 @@ def main() -> int:
         "tests",
         "alembic/env.py",
         "alembic/versions/20260920_04_closure_security_convergence.py",
+        "alembic/versions/20260924_05_lab_assets.py",
         "quality_gate.py",
     ]
     results = [
