@@ -51,3 +51,12 @@ htmlcov/
 
 # Local audit artifacts
 audit-results/
+
+# Private evidence belongs outside the repository (defense in depth).
+evidence-data/
+evidence-storage/
+evidence-keys/
+*.evidence
+*.kek
+.evidence.lock
+stage-*.tmp

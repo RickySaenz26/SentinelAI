@@ -10,3 +10,10 @@ coverage/
 htmlcov/
 Dockerfile
 .dockerignore
+**/evidence-data
+**/evidence-storage
+**/evidence-keys
+**/*.evidence
+**/*.kek
+**/.evidence.lock
+**/stage-*.tmp

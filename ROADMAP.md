@@ -39,3 +39,14 @@ Resultados de ejecución: `docs/engineering/SPRINT_2A_INCREMENT_1_RESULTS.md`.
 No es el cierre de todo Sprint 2A. Siguen pendientes evidencia cifrada, verificación
 humana, autorizaciones y elegibilidad; tampoco hay jobs, scanners ni UI integrada.
 Registrar un activo no acredita propiedad ni autoriza conectarse al objetivo.
+
+## Sprint 2A — incremento 2, etapa 1 (diff para revisión)
+
+Biblioteca interna de evidencia estructurada, cifrado y storage local Linux, sin
+endpoints ni coordinación PostgreSQL. No cierra incremento 2 ni Sprint 2A.
+Especialización aprobada solo para laboratorio:
+`docs/engineering/ADR_009_LAB_STORAGE.md`.
+Contrato, garantías y límites:
+`docs/engineering/SPRINT_2A_INCREMENT_2_STAGE_1.md`.
+La retirada/readmisión de una IP exigirá revisión humana nueva en el workflow
+futuro. Esta etapa no implementa estados aprobados, revisión humana ni autorización.

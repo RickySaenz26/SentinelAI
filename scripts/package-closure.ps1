@@ -4,6 +4,7 @@ param(
     [string]$ArtifactBaseName = 'SentinelAI-Sprint-1B.1-Closure-Final-20260923'
 )
 $ErrorActionPreference = 'Stop'
+. (Join-Path $PSScriptRoot 'package-file-policy.ps1')
 if ($ArtifactBaseName.EndsWith('.zip', [StringComparison]::OrdinalIgnoreCase)) {
     throw 'ArtifactBaseName must not include the .zip extension.'
 }
@@ -53,18 +54,12 @@ $ArchivePath = Join-Path (Split-Path -Parent $RepositoryRoot) "$ArtifactBaseName
 if (Test-Path -LiteralPath $ArchivePath) {
     throw 'Archive already exists. Preserve or rename it explicitly before packaging again.'
 }
-$ExcludedDirectories = @('.git', '.venv', 'venv', 'node_modules', 'dist', 'build', '.next',
-    'out', 'coverage', 'htmlcov', '.pytest_cache', '.ruff_cache', '.mypy_cache', '.cache',
-    '__pycache__', 'logs', 'tmp', 'qa_report_render')
-$ExcludedExtensions = @('.pyc', '.pyo', '.log', '.sqlite', '.sqlite3', '.db', '.pem', '.key')
 $Files = @(Get-ChildItem -LiteralPath $RepositoryRoot -Recurse -File -Force | Where-Object {
     $relative = [IO.Path]::GetRelativePath($RepositoryRoot, $_.FullName)
-    $parts = $relative -split '[\\/]'
-    $blockedPart = @($parts | Where-Object { $_ -in $ExcludedDirectories }).Count -gt 0
-    -not $blockedPart -and $_.Extension -notin $ExcludedExtensions -and
-        $_.Name -notlike '.coverage*' -and $_.Name -notlike 'coverage*.json' -and
-        ($_.Name -notlike '.env*' -or $_.Name -eq '.env.example') -and
-        $_.Name -notmatch '(?i)(credentials|recovery[-_]?codes|private[-_]?key)'
+    if ($_.Attributes -band [IO.FileAttributes]::ReparsePoint) {
+        throw 'Packaging refuses reparse-point files.'
+    }
+    Test-ClosurePackagePath $relative
 })
 Add-Type -AssemblyName System.IO.Compression
 $archive = [IO.Compression.ZipFile]::Open($ArchivePath, [IO.Compression.ZipArchiveMode]::Create)
@@ -81,7 +76,8 @@ $inspection = [IO.Compression.ZipFile]::OpenRead($ArchivePath)
 try {
     if ($inspection.Entries.Count -ne $Files.Count) { throw 'ZIP entry count mismatch.' }
     foreach ($entry in $inspection.Entries) {
-        if ($entry.FullName -match '(^|/)(\.env|node_modules|dist|build|\.next|out|coverage|htmlcov|__pycache__|logs|\.venv|venv)(/|$)') {
+        $relative = $entry.FullName.Substring($ArtifactBaseName.Length + 1)
+        if (-not (Test-ClosurePackagePath $relative)) {
             throw "Excluded item found in ZIP: $($entry.FullName)"
         }
         # Read every entry fully; decompression failure fails the packaging gate.

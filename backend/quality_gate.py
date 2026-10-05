@@ -27,6 +27,7 @@ def main() -> int:
     lint_paths = [
         "app",
         "tests",
+        "storage_tests",
         "alembic/env.py",
         "alembic/versions/20260920_04_closure_security_convergence.py",
         "alembic/versions/20260924_05_lab_assets.py",

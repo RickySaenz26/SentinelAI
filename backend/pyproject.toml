@@ -1,7 +1,7 @@
 [tool.pytest.ini_options]
 addopts = "--strict-config --strict-markers --cov=app --cov-report=term-missing --cov-fail-under=90"
 pythonpath = ["."]
-testpaths = ["tests"]
+testpaths = ["tests", "storage_tests"]
 
 [tool.coverage.run]
 branch = true

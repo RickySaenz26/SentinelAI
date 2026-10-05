@@ -28,6 +28,7 @@ RUN groupadd --system --gid 10001 sentinelai \
 COPY --chown=sentinelai:sentinelai app ./app
 COPY --chown=sentinelai:sentinelai alembic ./alembic
 COPY --chown=sentinelai:sentinelai tests ./tests
+COPY --chown=sentinelai:sentinelai storage_tests ./storage_tests
 COPY --chown=sentinelai:sentinelai pyproject.toml alembic.ini requirements.txt requirements-dev.txt ./
 COPY --chown=sentinelai:sentinelai quality_gate.py ./quality_gate.py
 USER sentinelai
