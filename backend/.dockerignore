@@ -16,4 +16,5 @@ Dockerfile
 **/*.evidence
 **/*.kek
 **/.evidence.lock
+**/.evidence.coordinator.lock
 **/stage-*.tmp

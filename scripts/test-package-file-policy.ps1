@@ -7,7 +7,8 @@ $Denied = @('.env', 'backend/.env.local', 'x/opaque.evidence', 'x/lab-1.kek',
     'x/evidence-keys/opaque', 'x/evidence-storage/opaque', 'node_modules/a.js',
     'coverage/data', '.coverage', 'coverage.json', 'x/private-key.json',
     'x/recovery-codes.txt', 'x/credentials.json', 'x/data.db', 'x/a.pem',
-    '../escape', 'C:\outside\file', 'x/.venv/file', 'x/build/a', 'x/.cache/a')
+    '../escape', 'C:\outside\file', 'x/.venv/file', 'x/build/a', 'x/.cache/a',
+    'x/.evidence.coordinator.lock')
 $Allowed = @('.env.example', 'backend/app/evidence/storage.py',
     'backend/storage_tests/test_contract_crypto.py', 'docs/engineering/ADR_009_LAB_STORAGE.md')
 foreach ($Path in $Denied) {

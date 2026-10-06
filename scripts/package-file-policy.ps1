@@ -14,6 +14,7 @@ function Test-ClosurePackagePath {
     return [IO.Path]::GetExtension($name) -notin $ExcludedExtensions -and
         $name -notlike '.coverage*' -and $name -notlike 'coverage*.json' -and
         $name -ne '.evidence.lock' -and $name -notlike 'stage-*.tmp' -and
+        $name -ne '.evidence.coordinator.lock' -and
         ($name -notlike '.env*' -or $name -eq '.env.example') -and
         $name -notmatch '(?i)(credentials|recovery[-_]?codes|private[-_]?key)'
 }

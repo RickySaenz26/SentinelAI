@@ -82,11 +82,16 @@ def test_assets_upgrade_from_populated_04_and_reversible_empty_inventory(admin_e
                     ),
                     {"org": identifier, "hash": "a" * 64},
                 )
+            with engine.connect() as conn:
+                before_revision = conn.scalar(text("SELECT version_num FROM alembic_version"))
             refused = revision(existing, "downgrade", "20260920_04")
             assert refused.returncode != 0
             assert "requires an empty ephemeral asset database" in refused.stderr
             with engine.connect() as conn:
                 assert conn.scalar(text("SELECT count(*) FROM assets")) == 1
-                assert conn.scalar(text("SELECT version_num FROM alembic_version")) == "20260924_05"
+                # PostgreSQL rolls back the whole downgrade, including revisions after 05.
+                assert (
+                    conn.scalar(text("SELECT version_num FROM alembic_version")) == before_revision
+                )
         finally:
             engine.dispose()
