@@ -87,13 +87,15 @@ def test_evidence_upgrade_from_populated_05_and_safe_downgrade(admin_engine):
                         "hash": "b" * 64,
                     },
                 )
+            with engine.connect() as connection:
+                before_revision = connection.scalar(text("SELECT version_num FROM alembic_version"))
             result = revision(existing, "downgrade", "20260924_05")
             assert result.returncode != 0
             assert "requires an empty ephemeral evidence database" in result.stderr
             with engine.connect() as connection:
                 assert (
                     connection.scalar(text("SELECT version_num FROM alembic_version"))
-                    == "20261005_06"
+                    == before_revision
                 )
                 assert connection.scalar(text("SELECT count(*) FROM evidence_operations")) == 1
         finally:

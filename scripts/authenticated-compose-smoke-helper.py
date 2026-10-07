@@ -134,6 +134,20 @@ def seed() -> None:
             raise RuntimeError("Smoke seed requires a clean identity database.")
         org_a, user_a, membership_a = _seed_identity(session, identity_a)
         org_b, user_b, membership_b = _seed_identity(session, identity_b)
+        if payload.get("evidence_owner_email"):
+            set_organization_context(session, org_a)
+            owner = User(
+                email=normalize_email(payload["evidence_owner_email"]),
+                display_name="Ephemeral evidence presenter",
+            )
+            session.add(owner)
+            session.flush()
+            password = _required_string(payload, "evidence_owner_password")
+            validate_password(password)
+            session.add(PasswordCredential(user_id=owner.id, password_hash=hash_password(password)))
+            role = session.scalar(select(Role).where(Role.code == "org_owner", Role.is_system))
+            session.add(Membership(organization_id=org_a, user_id=owner.id, role_id=role.id))
+            session.commit()
 
     result = {
         "organization_a_id": str(org_a),
@@ -230,6 +244,8 @@ def main() -> int:
     parser = argparse.ArgumentParser()
     subcommands = parser.add_subparsers(dest="command", required=True)
     subcommands.add_parser("seed")
+    evidence_parser = subcommands.add_parser("verify-evidence")
+    evidence_parser.add_argument("--organization-a", required=True, type=UUID)
     verify_parser = subcommands.add_parser("verify")
     verify_parser.add_argument("--organization-a", required=True, type=UUID)
     verify_parser.add_argument("--organization-b", required=True, type=UUID)
@@ -238,6 +254,21 @@ def main() -> int:
     try:
         if args.command == "seed":
             seed()
+        elif args.command == "verify-evidence":
+            _require_ephemeral_smoke_database()
+            with get_session_factory()() as session:
+                set_organization_context(session, args.organization_a)
+                for query in (
+                    "SELECT count(*) FROM evidence_versions",
+                    "SELECT count(*) FROM evidence_operations WHERE state='committed'",
+                    "SELECT count(*) FROM security_audit_events WHERE action='evidence.stored'",
+                    "SELECT count(*) FROM outbox_events WHERE event_type='evidence.stored'",
+                    "SELECT count(*) FROM security_audit_events "
+                    "WHERE action='evidence.content_read'",
+                ):
+                    assert session.scalar(text(query)) == 1
+                assert verify_chain(session, args.organization_a) == (True, None)
+            print("HTTPS_EVIDENCE_RECORDS=PASS")
         else:
             verify(args.organization_a, args.organization_b, args.user_a)
     except Exception as error:

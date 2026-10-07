@@ -15,11 +15,18 @@ from starlette.requests import Request
 from app.api.v1.dependencies import SESSION_COOKIE, get_actor
 from app.assets.configuration import get_lab_policy
 from app.core.errors import ApplicationError
-from app.evidence.contracts import EvidenceContext, canonical_json, document_bytes, parse_submission
+from app.evidence.contracts import (
+    EvidenceContext,
+    canonical_json,
+    decode_document,
+    document_bytes,
+    parse_submission,
+)
 from app.evidence.coordination import coordinate
 from app.evidence.crypto import MAX_ENVELOPE_BYTES
 from app.evidence.storage import ObjectReceipt
 from app.platform.database.models import Asset
+from app.platform.http_idempotency import HttpReplay
 from app.platform.outbox import emit_event
 from app.security_audit.service import record_event
 
@@ -32,6 +39,8 @@ def fail(code: str, status: int = 409):
 class SessionCredentials:
     token: str = field(repr=False)
     csrf: str = field(repr=False)
+    method: str = "POST"
+    origin: str | None = None
 
     def authenticate(self, session):
         cookie = SimpleCookie()
@@ -39,9 +48,10 @@ class SessionCredentials:
         request = Request(
             {
                 "type": "http",
-                "method": "POST",
+                "method": self.method,
                 "path": "/internal/evidence",
-                "headers": [(b"cookie", cookie.output(header="").strip().encode("ascii"))],
+                "headers": [(b"cookie", cookie.output(header="").strip().encode("ascii"))]
+                + ([(b"origin", self.origin.encode("latin-1"))] if self.origin is not None else []),
             }
         )
         return get_actor(request, csrf_token=self.csrf, session=session)
@@ -81,7 +91,11 @@ class EvidenceService:
 
     def authorize(self, session, credentials, asset_id, asset_version):
         actor = credentials.authenticate(session)
-        if "evidence:write" not in actor.permissions:
+        if (
+            actor.role_code not in {"org_owner", "security_manager", "analyst"}
+            or "platform:admin" in actor.permissions
+            or "evidence:write" not in actor.permissions
+        ):
             fail("FORBIDDEN", 403)
         asset = session.scalar(
             select(Asset)
@@ -138,10 +152,45 @@ class EvidenceService:
         ):
             fail("EVIDENCE_RESERVATION_INVALID")
 
-    def reserve(self, credentials, asset_id, asset_version, version, key_hash, fingerprint):
+    def reserve(
+        self,
+        credentials,
+        asset_id,
+        asset_version,
+        version,
+        key_hash,
+        fingerprint,
+        *,
+        http_key=None,
+        document=None,
+    ):
         with self.transaction("reserve") as session:
             actor, policy_hash = self.authorize(session, credentials, asset_id, asset_version)
             org = actor.organization_id
+            binding = None
+            if http_key is not None:
+                binding = HttpReplay(
+                    session,
+                    actor,
+                    key=http_key,
+                    method="POST",
+                    route=f"/api/v1/evidence/assets/{asset_id}",
+                    payload={
+                        "document": document.model_dump(mode="json"),
+                        "if_match": asset_version,
+                    },
+                )
+                pointer = binding.replay()
+                if pointer is not None:
+                    previous = self.operation(session, org, UUID(pointer["operation_id"]))
+                    if previous["state"] != "committed":
+                        fail("EVIDENCE_OPERATION_PENDING")
+                    return previous, True
+                # Only new submissions apply observation freshness. A replay has a
+                # fixed 24-hour HTTP lifetime, even when its observation is older.
+                parse_submission(document_bytes(document), now=datetime.now(UTC))
+                key_hash = uuid4().hex * 2
+                fingerprint = binding.fingerprint
             session.execute(
                 text(
                     "INSERT INTO evidence_quotas(organization_id) VALUES(:org) "
@@ -187,6 +236,8 @@ class EvidenceService:
                 ),
                 {"org": org, "asset": asset_id},
             )
+            if http_key is not None:
+                version = latest + 1
             if version != latest + 1 or pending:
                 fail("EVIDENCE_VERSION_CONFLICT")
             row = (
@@ -223,6 +274,10 @@ class EvidenceService:
                 ),
                 {"size": MAX_ENVELOPE_BYTES, "org": org},
             )
+            if binding is not None:
+                binding.save(
+                    asset_id=asset_id, status_code=201, body={"operation_id": str(row["id"])}
+                )
             return dict(row), False
 
     def submit(
@@ -235,6 +290,7 @@ class EvidenceService:
         key: str,
         raw: bytes,
         request_id: str,
+        http: bool = False,
     ) -> ObjectReceipt:
         if (
             not isinstance(key, str)
@@ -246,7 +302,7 @@ class EvidenceService:
             for value in (version, asset_version)
         ):
             fail("INVALID_EVIDENCE_VERSION", 422)
-        document = parse_submission(raw, now=datetime.now(UTC))
+        document = decode_document(raw) if http else parse_submission(raw, now=datetime.now(UTC))
         fingerprint = hashlib.sha256(
             canonical_json(
                 {
@@ -265,9 +321,12 @@ class EvidenceService:
                 version,
                 hashlib.sha256(key.encode()).hexdigest(),
                 fingerprint,
+                **({"http_key": key, "document": document} if http else {}),
             )
+            self.replayed = replay
             if replay:
                 return receipt_from(row)
+            version = row["version"]
             context = EvidenceContext(
                 organization_id=row["organization_id"],
                 asset_id=asset_id,

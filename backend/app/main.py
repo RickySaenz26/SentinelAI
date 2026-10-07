@@ -108,7 +108,11 @@ def create_app() -> FastAPI:
                 "SessionCookie"
             ] = {"type": "apiKey", "in": "cookie", "name": SESSION_COOKIE}
             for path, operations in schema["paths"].items():
-                if path != "/api/v1/assets" and not path.startswith("/api/v1/assets/"):
+                if (
+                    path != "/api/v1/assets"
+                    and not path.startswith("/api/v1/assets/")
+                    and not path.startswith("/api/v1/evidence/")
+                ):
                     continue
                 for method, operation in operations.items():
                     operation["security"] = [{"SessionCookie": []}]

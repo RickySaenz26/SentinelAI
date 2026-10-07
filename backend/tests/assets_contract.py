@@ -3,9 +3,15 @@
 from copy import deepcopy
 
 
-def assets_contract(document: dict, csrf_header: str) -> dict:
+def assets_contract(
+    document: dict,
+    csrf_header: str,
+    *,
+    prefix="/api/v1/assets",
+    title="SentinelAI laboratory assets — increment 1",
+) -> dict:
     paths = deepcopy(
-        {key: value for key, value in document["paths"].items() if key.startswith("/api/v1/assets")}
+        {key: value for key, value in document["paths"].items() if key.startswith(prefix)}
     )
     references: set[str] = set()
 
@@ -43,7 +49,7 @@ def assets_contract(document: dict, csrf_header: str) -> dict:
         }
     return {
         "openapi": document["openapi"],
-        "info": {"title": "SentinelAI laboratory assets — increment 1", "version": "1.0.0"},
+        "info": {"title": title, "version": "1.0.0"},
         "paths": paths,
         "components": components,
     }

@@ -1,0 +1,1548 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "SentinelAI laboratory evidence — increment 2 stage 3",
+    "version": "1.0.0"
+  },
+  "paths": {
+    "/api/v1/evidence/assets/{asset_id}": {
+      "post": {
+        "tags": [
+          "evidence"
+        ],
+        "summary": "Present Evidence",
+        "description": "Present technical evidence only; never ownership or scan authorization.\n\n16 KiB streaming cap; no compression. Required If-Match binds the asset version.\nReplay lasts 24 hours, binds actor/tenant/method/route/document/precondition and\nreturns fresh metadata after authorization. A pending operation is not repeated.",
+        "operationId": "present_evidence_api_v1_evidence_assets__asset_id__post",
+        "parameters": [
+          {
+            "name": "asset_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Asset Id"
+            }
+          },
+          {
+            "name": "If-Match",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "title": "If-Match"
+            }
+          },
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128,
+              "pattern": "^[A-Za-z0-9][A-Za-z0-9:._-]*$",
+              "title": "Idempotency-Key"
+            }
+          },
+          {
+            "name": "X-CSRF-Token",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "X-Csrf-Token"
+            }
+          },
+          {
+            "name": "Origin",
+            "in": "header",
+            "required": false,
+            "description": "When provided, must match a configured trusted origin; otherwise 403.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EvidenceMetadata"
+                }
+              }
+            },
+            "headers": {
+              "Cache-Control": {
+                "description": "Sensitive responses must not be stored, including errors.",
+                "schema": {
+                  "type": "string",
+                  "const": "no-store"
+                }
+              },
+              "Idempotency-Replayed": {
+                "description": "true for an authorized replay; false for a new presentation.",
+                "schema": {
+                  "type": "string",
+                  "enum": [
+                    "true",
+                    "false"
+                  ]
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Session or membership missing, expired, switched or revoked.",
+            "headers": {
+              "Cache-Control": {
+                "description": "Sensitive responses must not be stored, including errors.",
+                "schema": {
+                  "type": "string",
+                  "const": "no-store"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AssetErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Explicit permission, CSRF, Origin or current write policy denied.",
+            "headers": {
+              "Cache-Control": {
+                "description": "Sensitive responses must not be stored, including errors.",
+                "schema": {
+                  "type": "string",
+                  "const": "no-store"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AssetErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Resource unavailable in authorized tenant/ownership scope.",
+            "headers": {
+              "Cache-Control": {
+                "description": "Sensitive responses must not be stored, including errors.",
+                "schema": {
+                  "type": "string",
+                  "const": "no-store"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AssetErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Asset version, quota, idempotency, pending operation or coordinator conflict.",
+            "headers": {
+              "Cache-Control": {
+                "description": "Sensitive responses must not be stored, including errors.",
+                "schema": {
+                  "type": "string",
+                  "const": "no-store"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AssetErrorResponse"
+                }
+              }
+            }
+          },
+          "410": {
+            "description": "Authorized content is beyond its 90-day retention window.",
+            "headers": {
+              "Cache-Control": {
+                "description": "Sensitive responses must not be stored, including errors.",
+                "schema": {
+                  "type": "string",
+                  "const": "no-store"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AssetErrorResponse"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "Body exceeds 16384 bytes, including streamed/chunked requests.",
+            "headers": {
+              "Cache-Control": {
+                "description": "Sensitive responses must not be stored, including errors.",
+                "schema": {
+                  "type": "string",
+                  "const": "no-store"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AssetErrorResponse"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "Only uncompressed application/json (optional charset=utf-8).",
+            "headers": {
+              "Cache-Control": {
+                "description": "Sensitive responses must not be stored, including errors.",
+                "schema": {
+                  "type": "string",
+                  "const": "no-store"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AssetErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Invalid document or request; duplicate/extra fields are rejected.",
+            "headers": {
+              "Cache-Control": {
+                "description": "Sensitive responses must not be stored, including errors.",
+                "schema": {
+                  "type": "string",
+                  "const": "no-store"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AssetErrorResponse"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Evidence, database or access audit unavailable; commit may be uncertain.",
+            "headers": {
+              "Cache-Control": {
+                "description": "Sensitive responses must not be stored, including errors.",
+                "schema": {
+                  "type": "string",
+                  "const": "no-store"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AssetErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "additionalProperties": false,
+                "properties": {
+                  "schema_version": {
+                    "maximum": 1,
+                    "minimum": 1,
+                    "title": "Schema Version",
+                    "type": "integer"
+                  },
+                  "method": {
+                    "const": "supervised_local_console",
+                    "title": "Method",
+                    "type": "string"
+                  },
+                  "observed_at": {
+                    "format": "date-time",
+                    "title": "Observed At",
+                    "type": "string"
+                  },
+                  "lab_asset_reference": {
+                    "pattern": "^LAB-[0-9]{1,6}$",
+                    "title": "Lab Asset Reference",
+                    "type": "string"
+                  },
+                  "observations": {
+                    "$ref": "#/components/schemas/Observations"
+                  },
+                  "declaration": {
+                    "const": "technical_control_only_not_ownership_or_scan_permission",
+                    "title": "Declaration",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "schema_version",
+                  "method",
+                  "observed_at",
+                  "lab_asset_reference",
+                  "observations",
+                  "declaration"
+                ],
+                "title": "LabAttestation",
+                "type": "object"
+              },
+              "x-max-bytes": 16384
+            }
+          }
+        },
+        "security": [
+          {
+            "SessionCookie": []
+          }
+        ]
+      },
+      "get": {
+        "tags": [
+          "evidence"
+        ],
+        "summary": "List Evidence",
+        "description": "Private metadata; analysts see only their own submissions. Includes archived assets.",
+        "operationId": "list_evidence_api_v1_evidence_assets__asset_id__get",
+        "parameters": [
+          {
+            "name": "asset_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Asset Id"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 100,
+              "minimum": 1,
+              "default": 50,
+              "title": "Limit"
+            }
+          },
+          {
+            "name": "after_version",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 2147483647,
+              "minimum": 0,
+              "default": 0,
+              "title": "After Version"
+            }
+          },
+          {
+            "name": "X-CSRF-Token",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Csrf-Token"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EvidencePage"
+                }
+              }
+            },
+            "headers": {
+              "Cache-Control": {
+                "description": "Sensitive responses must not be stored, including errors.",
+                "schema": {
+                  "type": "string",
+                  "const": "no-store"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Session or membership missing, expired, switched or revoked.",
+            "headers": {
+              "Cache-Control": {
+                "description": "Sensitive responses must not be stored, including errors.",
+                "schema": {
+                  "type": "string",
+                  "const": "no-store"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AssetErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Explicit permission, CSRF, Origin or current write policy denied.",
+            "headers": {
+              "Cache-Control": {
+                "description": "Sensitive responses must not be stored, including errors.",
+                "schema": {
+                  "type": "string",
+                  "const": "no-store"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AssetErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Resource unavailable in authorized tenant/ownership scope.",
+            "headers": {
+              "Cache-Control": {
+                "description": "Sensitive responses must not be stored, including errors.",
+                "schema": {
+                  "type": "string",
+                  "const": "no-store"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AssetErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Asset version, quota, idempotency, pending operation or coordinator conflict.",
+            "headers": {
+              "Cache-Control": {
+                "description": "Sensitive responses must not be stored, including errors.",
+                "schema": {
+                  "type": "string",
+                  "const": "no-store"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AssetErrorResponse"
+                }
+              }
+            }
+          },
+          "410": {
+            "description": "Authorized content is beyond its 90-day retention window.",
+            "headers": {
+              "Cache-Control": {
+                "description": "Sensitive responses must not be stored, including errors.",
+                "schema": {
+                  "type": "string",
+                  "const": "no-store"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AssetErrorResponse"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "Body exceeds 16384 bytes, including streamed/chunked requests.",
+            "headers": {
+              "Cache-Control": {
+                "description": "Sensitive responses must not be stored, including errors.",
+                "schema": {
+                  "type": "string",
+                  "const": "no-store"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AssetErrorResponse"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "Only uncompressed application/json (optional charset=utf-8).",
+            "headers": {
+              "Cache-Control": {
+                "description": "Sensitive responses must not be stored, including errors.",
+                "schema": {
+                  "type": "string",
+                  "const": "no-store"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AssetErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Invalid document or request; duplicate/extra fields are rejected.",
+            "headers": {
+              "Cache-Control": {
+                "description": "Sensitive responses must not be stored, including errors.",
+                "schema": {
+                  "type": "string",
+                  "const": "no-store"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AssetErrorResponse"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Evidence, database or access audit unavailable; commit may be uncertain.",
+            "headers": {
+              "Cache-Control": {
+                "description": "Sensitive responses must not be stored, including errors.",
+                "schema": {
+                  "type": "string",
+                  "const": "no-store"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AssetErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "SessionCookie": []
+          }
+        ]
+      }
+    },
+    "/api/v1/evidence/assets/{asset_id}/summary": {
+      "get": {
+        "tags": [
+          "evidence"
+        ],
+        "summary": "Evidence Summary",
+        "description": "Minimal count only, scoped to the active tenant; unverified is not authority.",
+        "operationId": "evidence_summary_api_v1_evidence_assets__asset_id__summary_get",
+        "parameters": [
+          {
+            "name": "asset_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Asset Id"
+            }
+          },
+          {
+            "name": "X-CSRF-Token",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Csrf-Token"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EvidenceSummary"
+                }
+              }
+            },
+            "headers": {
+              "Cache-Control": {
+                "description": "Sensitive responses must not be stored, including errors.",
+                "schema": {
+                  "type": "string",
+                  "const": "no-store"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Session or membership missing, expired, switched or revoked.",
+            "headers": {
+              "Cache-Control": {
+                "description": "Sensitive responses must not be stored, including errors.",
+                "schema": {
+                  "type": "string",
+                  "const": "no-store"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AssetErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Explicit permission, CSRF, Origin or current write policy denied.",
+            "headers": {
+              "Cache-Control": {
+                "description": "Sensitive responses must not be stored, including errors.",
+                "schema": {
+                  "type": "string",
+                  "const": "no-store"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AssetErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Resource unavailable in authorized tenant/ownership scope.",
+            "headers": {
+              "Cache-Control": {
+                "description": "Sensitive responses must not be stored, including errors.",
+                "schema": {
+                  "type": "string",
+                  "const": "no-store"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AssetErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Asset version, quota, idempotency, pending operation or coordinator conflict.",
+            "headers": {
+              "Cache-Control": {
+                "description": "Sensitive responses must not be stored, including errors.",
+                "schema": {
+                  "type": "string",
+                  "const": "no-store"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AssetErrorResponse"
+                }
+              }
+            }
+          },
+          "410": {
+            "description": "Authorized content is beyond its 90-day retention window.",
+            "headers": {
+              "Cache-Control": {
+                "description": "Sensitive responses must not be stored, including errors.",
+                "schema": {
+                  "type": "string",
+                  "const": "no-store"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AssetErrorResponse"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "Body exceeds 16384 bytes, including streamed/chunked requests.",
+            "headers": {
+              "Cache-Control": {
+                "description": "Sensitive responses must not be stored, including errors.",
+                "schema": {
+                  "type": "string",
+                  "const": "no-store"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AssetErrorResponse"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "Only uncompressed application/json (optional charset=utf-8).",
+            "headers": {
+              "Cache-Control": {
+                "description": "Sensitive responses must not be stored, including errors.",
+                "schema": {
+                  "type": "string",
+                  "const": "no-store"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AssetErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Invalid document or request; duplicate/extra fields are rejected.",
+            "headers": {
+              "Cache-Control": {
+                "description": "Sensitive responses must not be stored, including errors.",
+                "schema": {
+                  "type": "string",
+                  "const": "no-store"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AssetErrorResponse"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Evidence, database or access audit unavailable; commit may be uncertain.",
+            "headers": {
+              "Cache-Control": {
+                "description": "Sensitive responses must not be stored, including errors.",
+                "schema": {
+                  "type": "string",
+                  "const": "no-store"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AssetErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "SessionCookie": []
+          }
+        ]
+      }
+    },
+    "/api/v1/evidence/assets/{asset_id}/{evidence_id}": {
+      "get": {
+        "tags": [
+          "evidence"
+        ],
+        "summary": "Evidence Metadata",
+        "operationId": "evidence_metadata_api_v1_evidence_assets__asset_id___evidence_id__get",
+        "parameters": [
+          {
+            "name": "asset_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Asset Id"
+            }
+          },
+          {
+            "name": "evidence_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Evidence Id"
+            }
+          },
+          {
+            "name": "X-CSRF-Token",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Csrf-Token"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EvidenceMetadata"
+                }
+              }
+            },
+            "headers": {
+              "Cache-Control": {
+                "description": "Sensitive responses must not be stored, including errors.",
+                "schema": {
+                  "type": "string",
+                  "const": "no-store"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Session or membership missing, expired, switched or revoked.",
+            "headers": {
+              "Cache-Control": {
+                "description": "Sensitive responses must not be stored, including errors.",
+                "schema": {
+                  "type": "string",
+                  "const": "no-store"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AssetErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Explicit permission, CSRF, Origin or current write policy denied.",
+            "headers": {
+              "Cache-Control": {
+                "description": "Sensitive responses must not be stored, including errors.",
+                "schema": {
+                  "type": "string",
+                  "const": "no-store"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AssetErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Resource unavailable in authorized tenant/ownership scope.",
+            "headers": {
+              "Cache-Control": {
+                "description": "Sensitive responses must not be stored, including errors.",
+                "schema": {
+                  "type": "string",
+                  "const": "no-store"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AssetErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Asset version, quota, idempotency, pending operation or coordinator conflict.",
+            "headers": {
+              "Cache-Control": {
+                "description": "Sensitive responses must not be stored, including errors.",
+                "schema": {
+                  "type": "string",
+                  "const": "no-store"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AssetErrorResponse"
+                }
+              }
+            }
+          },
+          "410": {
+            "description": "Authorized content is beyond its 90-day retention window.",
+            "headers": {
+              "Cache-Control": {
+                "description": "Sensitive responses must not be stored, including errors.",
+                "schema": {
+                  "type": "string",
+                  "const": "no-store"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AssetErrorResponse"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "Body exceeds 16384 bytes, including streamed/chunked requests.",
+            "headers": {
+              "Cache-Control": {
+                "description": "Sensitive responses must not be stored, including errors.",
+                "schema": {
+                  "type": "string",
+                  "const": "no-store"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AssetErrorResponse"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "Only uncompressed application/json (optional charset=utf-8).",
+            "headers": {
+              "Cache-Control": {
+                "description": "Sensitive responses must not be stored, including errors.",
+                "schema": {
+                  "type": "string",
+                  "const": "no-store"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AssetErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Invalid document or request; duplicate/extra fields are rejected.",
+            "headers": {
+              "Cache-Control": {
+                "description": "Sensitive responses must not be stored, including errors.",
+                "schema": {
+                  "type": "string",
+                  "const": "no-store"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AssetErrorResponse"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Evidence, database or access audit unavailable; commit may be uncertain.",
+            "headers": {
+              "Cache-Control": {
+                "description": "Sensitive responses must not be stored, including errors.",
+                "schema": {
+                  "type": "string",
+                  "const": "no-store"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AssetErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "SessionCookie": []
+          }
+        ]
+      }
+    },
+    "/api/v1/evidence/assets/{asset_id}/{evidence_id}/content": {
+      "get": {
+        "tags": [
+          "evidence"
+        ],
+        "summary": "Evidence Content",
+        "description": "Read only after renewed authorization and committed access audit.\n\nArchived assets and removed IPs remain readable. After 90 days, return 410;\nno automatic purge. Cache-Control: no-store, including sanitized failures.",
+        "operationId": "evidence_content_api_v1_evidence_assets__asset_id___evidence_id__content_get",
+        "parameters": [
+          {
+            "name": "asset_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Asset Id"
+            }
+          },
+          {
+            "name": "evidence_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Evidence Id"
+            }
+          },
+          {
+            "name": "X-CSRF-Token",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Csrf-Token"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LabAttestation"
+                }
+              }
+            },
+            "headers": {
+              "Cache-Control": {
+                "description": "Sensitive responses must not be stored, including errors.",
+                "schema": {
+                  "type": "string",
+                  "const": "no-store"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Session or membership missing, expired, switched or revoked.",
+            "headers": {
+              "Cache-Control": {
+                "description": "Sensitive responses must not be stored, including errors.",
+                "schema": {
+                  "type": "string",
+                  "const": "no-store"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AssetErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Explicit permission, CSRF, Origin or current write policy denied.",
+            "headers": {
+              "Cache-Control": {
+                "description": "Sensitive responses must not be stored, including errors.",
+                "schema": {
+                  "type": "string",
+                  "const": "no-store"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AssetErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Resource unavailable in authorized tenant/ownership scope.",
+            "headers": {
+              "Cache-Control": {
+                "description": "Sensitive responses must not be stored, including errors.",
+                "schema": {
+                  "type": "string",
+                  "const": "no-store"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AssetErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Asset version, quota, idempotency, pending operation or coordinator conflict.",
+            "headers": {
+              "Cache-Control": {
+                "description": "Sensitive responses must not be stored, including errors.",
+                "schema": {
+                  "type": "string",
+                  "const": "no-store"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AssetErrorResponse"
+                }
+              }
+            }
+          },
+          "410": {
+            "description": "Authorized content is beyond its 90-day retention window.",
+            "headers": {
+              "Cache-Control": {
+                "description": "Sensitive responses must not be stored, including errors.",
+                "schema": {
+                  "type": "string",
+                  "const": "no-store"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AssetErrorResponse"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "Body exceeds 16384 bytes, including streamed/chunked requests.",
+            "headers": {
+              "Cache-Control": {
+                "description": "Sensitive responses must not be stored, including errors.",
+                "schema": {
+                  "type": "string",
+                  "const": "no-store"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AssetErrorResponse"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "Only uncompressed application/json (optional charset=utf-8).",
+            "headers": {
+              "Cache-Control": {
+                "description": "Sensitive responses must not be stored, including errors.",
+                "schema": {
+                  "type": "string",
+                  "const": "no-store"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AssetErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Invalid document or request; duplicate/extra fields are rejected.",
+            "headers": {
+              "Cache-Control": {
+                "description": "Sensitive responses must not be stored, including errors.",
+                "schema": {
+                  "type": "string",
+                  "const": "no-store"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AssetErrorResponse"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Evidence, database or access audit unavailable; commit may be uncertain.",
+            "headers": {
+              "Cache-Control": {
+                "description": "Sensitive responses must not be stored, including errors.",
+                "schema": {
+                  "type": "string",
+                  "const": "no-store"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AssetErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "SessionCookie": []
+          }
+        ]
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "AssetErrorResponse": {
+        "properties": {
+          "error": {
+            "$ref": "#/components/schemas/AssetApiError"
+          }
+        },
+        "type": "object",
+        "required": [
+          "error"
+        ],
+        "title": "AssetErrorResponse"
+      },
+      "EvidenceMetadata": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Id"
+          },
+          "asset_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Asset Id"
+          },
+          "version": {
+            "type": "integer",
+            "title": "Version"
+          },
+          "submitted_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Submitted At"
+          },
+          "retention_until": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Retention Until"
+          },
+          "content_available": {
+            "type": "boolean",
+            "title": "Content Available"
+          },
+          "request_id": {
+            "type": "string",
+            "title": "Request Id"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "id",
+          "asset_id",
+          "version",
+          "submitted_at",
+          "retention_until",
+          "content_available",
+          "request_id"
+        ],
+        "title": "EvidenceMetadata"
+      },
+      "EvidencePage": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/EvidenceMetadata"
+            },
+            "type": "array",
+            "title": "Items"
+          },
+          "next_version": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Next Version"
+          },
+          "request_id": {
+            "type": "string",
+            "title": "Request Id"
+          }
+        },
+        "type": "object",
+        "required": [
+          "items",
+          "next_version",
+          "request_id"
+        ],
+        "title": "EvidencePage"
+      },
+      "EvidenceSummary": {
+        "properties": {
+          "asset_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Asset Id"
+          },
+          "evidence_count": {
+            "type": "integer",
+            "title": "Evidence Count"
+          },
+          "ownership_status": {
+            "type": "string",
+            "const": "unverified",
+            "title": "Ownership Status"
+          },
+          "request_id": {
+            "type": "string",
+            "title": "Request Id"
+          }
+        },
+        "type": "object",
+        "required": [
+          "asset_id",
+          "evidence_count",
+          "ownership_status",
+          "request_id"
+        ],
+        "title": "EvidenceSummary"
+      },
+      "LabAttestation": {
+        "properties": {
+          "schema_version": {
+            "type": "integer",
+            "maximum": 1.0,
+            "minimum": 1.0,
+            "title": "Schema Version"
+          },
+          "method": {
+            "type": "string",
+            "const": "supervised_local_console",
+            "title": "Method"
+          },
+          "observed_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Observed At"
+          },
+          "lab_asset_reference": {
+            "type": "string",
+            "pattern": "^LAB-[0-9]{1,6}$",
+            "title": "Lab Asset Reference"
+          },
+          "observations": {
+            "$ref": "#/components/schemas/Observations"
+          },
+          "declaration": {
+            "type": "string",
+            "const": "technical_control_only_not_ownership_or_scan_permission",
+            "title": "Declaration"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "schema_version",
+          "method",
+          "observed_at",
+          "lab_asset_reference",
+          "observations",
+          "declaration"
+        ],
+        "title": "LabAttestation"
+      },
+      "Observations": {
+        "properties": {
+          "console_identified": {
+            "type": "string",
+            "const": "observed",
+            "title": "Console Identified"
+          },
+          "inventory_ipv4_matches": {
+            "type": "string",
+            "const": "observed",
+            "title": "Inventory Ipv4 Matches"
+          },
+          "administrative_control": {
+            "type": "string",
+            "const": "observed",
+            "title": "Administrative Control"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "console_identified",
+          "inventory_ipv4_matches",
+          "administrative_control"
+        ],
+        "title": "Observations"
+      },
+      "AssetApiError": {
+        "properties": {
+          "code": {
+            "type": "string",
+            "title": "Code"
+          },
+          "message": {
+            "type": "string",
+            "title": "Message"
+          },
+          "details": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "type": "array",
+            "title": "Details"
+          },
+          "request_id": {
+            "type": "string",
+            "title": "Request Id"
+          }
+        },
+        "type": "object",
+        "required": [
+          "code",
+          "message",
+          "details",
+          "request_id"
+        ],
+        "title": "AssetApiError"
+      }
+    },
+    "securitySchemes": {
+      "SessionCookie": {
+        "type": "apiKey",
+        "in": "cookie",
+        "name": "__Host-sentinel_session"
+      }
+    }
+  }
+}

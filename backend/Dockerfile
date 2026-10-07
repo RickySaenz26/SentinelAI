@@ -25,6 +25,7 @@ ENV PATH="/opt/venv/bin:$PATH" \
     PYTHONUNBUFFERED=1
 RUN groupadd --system --gid 10001 sentinelai \
     && useradd --system --uid 10001 --gid sentinelai --home-dir /workspace --no-create-home sentinelai
+RUN printf '/workspace\n' > /etc/sentinelai-application-root
 COPY --chown=sentinelai:sentinelai app ./app
 COPY --chown=sentinelai:sentinelai alembic ./alembic
 COPY --chown=sentinelai:sentinelai tests ./tests
@@ -44,6 +45,7 @@ ENV PATH="/opt/venv/bin:$PATH" \
 
 RUN groupadd --system --gid 10001 sentinelai \
     && useradd --system --uid 10001 --gid sentinelai --home-dir /app --no-create-home sentinelai
+RUN printf '/app\n' > /etc/sentinelai-application-root
 
 WORKDIR /app
 COPY --from=builder /opt/venv /opt/venv

@@ -32,6 +32,7 @@ def main() -> int:
         "alembic/versions/20260920_04_closure_security_convergence.py",
         "alembic/versions/20260924_05_lab_assets.py",
         "alembic/versions/20261005_06_evidence_operations.py",
+        "alembic/versions/20261006_07_evidence_api_permissions.py",
         "quality_gate.py",
     ]
     results = [

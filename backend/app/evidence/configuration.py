@@ -8,7 +8,11 @@ from pathlib import Path
 
 from app.evidence.crypto import KEY_ID_PATTERN, EnvelopeCodec
 from app.evidence.errors import EvidenceUnavailable, UnsafeStorage
-from app.evidence.filesystem import PrivateDirectory, reject_ambiguous_posix_root
+from app.evidence.filesystem import (
+    PrivateDirectory,
+    reject_ambiguous_posix_root,
+    validate_private_location,
+)
 
 
 class FileKeyProvider:
@@ -64,6 +68,8 @@ def configured_storage(environment: Mapping[str, str], *, repository_root: Path)
     from app.evidence.storage import LocalEvidenceStorage
 
     root, key_root, active_id = storage_configuration(environment)
+    validate_private_location(root, repository_root=repository_root)
+    validate_private_location(key_root, repository_root=repository_root)
     provider = FileKeyProvider(key_root, repository_root=repository_root)
     try:
         provider.get_key(active_id)  # fail closed before allowing any write

@@ -3,10 +3,12 @@
 param(
     [ValidateRange(60, 300)]
     [int]$TimeoutSeconds = 180,
-    [switch]$Assets
+    [switch]$Assets,
+    [switch]$Evidence
 )
 
 $ErrorActionPreference = 'Stop'
+if ($Evidence) { $Assets = $true }
 $RepositoryRoot = (Resolve-Path -LiteralPath (Split-Path -Parent $PSScriptRoot)).Path
 $BaseComposePath = Join-Path $RepositoryRoot 'compose.yaml'
 $SmokeComposePath = Join-Path $RepositoryRoot 'compose.smoke.yaml'
@@ -142,6 +144,10 @@ function Invoke-SmokeRequest {
                 StatusCode = [int]$response.StatusCode
                 Body = $content
                 SetCookie = $setCookie
+                CacheControl = [string]$response.Headers.CacheControl
+                Replayed = if ($response.Headers.Contains('Idempotency-Replayed')) {
+                    @($response.Headers.GetValues('Idempotency-Replayed')) -join ','
+                } else { '' }
             }
         }
         finally {
@@ -210,6 +216,8 @@ $PasswordA = "Aa1!$(Get-RandomHex -ByteCount 24)"
 $PasswordB = "Bb2!$(Get-RandomHex -ByteCount 24)"
 $EmailA = "smoke-admin-$runId@example.com"
 $EmailB = "smoke-viewer-$runId@example.com"
+$EmailEvidence = "smoke-evidence-$runId@example.com"
+$PasswordEvidence = "Ec3!$(Get-RandomHex -ByteCount 24)"
 $EnvironmentValues = @{
     COMPOSE_PROJECT_NAME = $ProjectName
     SMOKE_PROJECT_NAME = $ProjectName
@@ -220,6 +228,9 @@ $EnvironmentValues = @{
     CORS_ORIGINS = $TrustedOrigin
     TRUSTED_ORIGINS = $TrustedOrigin
     CSRF_HEADER_NAME = $CsrfHeaderName
+    LAB_EVIDENCE_ROOT = if ($Evidence) { '/tmp/sentinelai-smoke-storage' } else { '' }
+    LAB_EVIDENCE_KEY_ROOT = if ($Evidence) { '/tmp/sentinelai-smoke-keys' } else { '' }
+    LAB_EVIDENCE_ACTIVE_KEY_ID = if ($Evidence) { 'smoke-1' } else { '' }
     # Synthetic inventory-only policy belongs exclusively to this disposable test.
     # An ordinary smoke always clears inherited policy and proves default denial.
     LAB_ASSET_POLICY_JSON = if ($Assets) {
@@ -251,6 +262,7 @@ $StackMayExist = $false
 $AdminClient = $null
 $ViewerClient = $null
 $StaleClient = $null
+$EvidenceClient = $null
 $CurrentStage = 'initialization'
 
 try {
@@ -265,6 +277,26 @@ try {
         -Operation $CurrentStage
     Wait-SmokeStack -ComposeArguments $ComposeArguments -Timeout $TimeoutSeconds
     Write-Pass 'PostgreSQL, Redis, migrations, backend and HTTPS frontend are healthy.'
+    if ($Evidence) {
+        $CurrentStage = 'ephemeral evidence provisioning inside backend tmpfs'
+        $provision = @'
+import os
+from pathlib import Path
+assert os.environ['ENVIRONMENT'] == 'test'
+assert '/sentinelai_smoke_' in os.environ['DATABASE_URL']
+for name in ('/tmp/sentinelai-smoke-storage', '/tmp/sentinelai-smoke-keys'):
+    Path(name).mkdir(mode=0o700)
+key = Path('/tmp/sentinelai-smoke-keys/smoke-1.kek')
+fd = os.open(key, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+try:
+    assert os.write(fd, os.urandom(32)) == 32
+finally:
+    os.close(fd)
+print('EPHEMERAL EVIDENCE PROVISIONED')
+'@
+        $provision | & docker @($ComposeArguments + @('exec', '-T', 'backend', 'python', '-'))
+        if ($LASTEXITCODE -ne 0) { throw 'Ephemeral evidence provisioning failed.' }
+    }
 
     $CurrentStage = 'temporary identity seed'
     $seedPayload = @{
@@ -278,6 +310,8 @@ try {
         b_email = $EmailB
         b_display_name = 'Smoke Viewer B'
         b_password = $PasswordB
+        evidence_owner_email = if ($Evidence) { $EmailEvidence } else { '' }
+        evidence_owner_password = if ($Evidence) { $PasswordEvidence } else { '' }
     } | ConvertTo-Json -Compress
     $seedArguments = $ComposeArguments + @(
         'run', '--rm', '-T', '--no-deps',
@@ -482,6 +516,60 @@ try {
             throw 'Asset creation made an unexpected ownership/version claim.'
         }
         $assetPath = '/api/v1/assets/' + $asset.id
+        if ($Evidence) {
+            $CurrentStage = 'evidence HTTPS presentation and authorized reading'
+            $EvidenceClient = New-SmokeClient -BaseUri $BaseUri
+            $response = Invoke-SmokeRequest -Client $EvidenceClient.Client -Method POST `
+                -Path '/api/v1/session' -Body @{ email = $EmailEvidence; password = $PasswordEvidence }
+            Assert-Status $response 200 'evidence owner login'
+            $evidenceCsrf = [string]($response.Body | ConvertFrom-Json).csrf_token
+            $evidencePath = '/api/v1/evidence/assets/' + $asset.id
+            $evidenceHeaders = @{
+                Origin = $TrustedOrigin; $CsrfHeaderName = $evidenceCsrf
+                'If-Match' = '1'; 'Idempotency-Key' = 'https-evidence-1'
+            }
+            $document = @{
+                schema_version = 1; method = 'supervised_local_console'
+                observed_at = [DateTimeOffset]::UtcNow.AddSeconds(-1).ToString('o')
+                lab_asset_reference = 'LAB-123456'
+                observations = @{ console_identified = 'observed'; inventory_ipv4_matches = 'observed'; administrative_control = 'observed' }
+                declaration = 'technical_control_only_not_ownership_or_scan_permission'
+            }
+            $response = Invoke-SmokeRequest -Client $EvidenceClient.Client -Method POST `
+                -Path $evidencePath -Headers @{ 'If-Match' = '1'; 'Idempotency-Key' = 'no-csrf' } -Body $document
+            Assert-Status $response 403 'evidence missing CSRF'
+            $response = Invoke-SmokeRequest -Client $AdminClient.Client -Method POST `
+                -Path $evidencePath -Headers @{ Origin = $TrustedOrigin; $CsrfHeaderName = $CsrfA; 'If-Match' = '1'; 'Idempotency-Key' = 'admin-denied' } -Body $document
+            Assert-Status $response 403 'platform_admin evidence bypass denied'
+            $response = Invoke-SmokeRequest -Client $EvidenceClient.Client -Method POST `
+                -Path $evidencePath -Headers $evidenceHeaders -Body $document
+            Assert-Status $response 201 'evidence presentation'
+            $evidenceId = [string]($response.Body | ConvertFrom-Json).id
+            if ($response.Body.Contains('LAB-123456')) { throw 'Metadata leaked evidence content.' }
+            $response = Invoke-SmokeRequest -Client $EvidenceClient.Client -Method POST `
+                -Path $evidencePath -Headers $evidenceHeaders -Body $document
+            Assert-Status $response 201 'evidence replay'
+            if (($response.Body | ConvertFrom-Json).id -ne $evidenceId -or $response.Replayed -ne 'true') { throw 'Evidence replay duplicated.' }
+            foreach ($path in @($evidencePath, "$evidencePath/summary", "$evidencePath/$evidenceId", "$evidencePath/$evidenceId/content")) {
+                $response = Invoke-SmokeRequest -Client $EvidenceClient.Client -Method GET -Path $path
+                Assert-Status $response 200 'authorized evidence read'
+                if ($response.CacheControl -ne 'no-store') { throw 'Evidence response permits caching.' }
+            }
+            if (($response.Body | ConvertFrom-Json).lab_asset_reference -ne 'LAB-123456') { throw 'Evidence roundtrip failed.' }
+            $response = Invoke-SmokeRequest -Client $AdminClient.Client -Method GET -Path "$evidencePath/$evidenceId/content"
+            Assert-Status $response 403 'platform_admin sensitive read denied'
+            $response = Invoke-SmokeRequest -Client $ViewerClient.Client -Method GET -Path "$evidencePath/summary"
+            Assert-Status $response 404 'cross-tenant evidence summary'
+            $evidenceVerifyArgs = $ComposeArguments + @(
+                'run', '--rm', '-T', '--no-deps',
+                '--volume', "${HelperPath}:/tmp/authenticated-compose-smoke-helper.py:ro",
+                '--env', 'PYTHONPATH=/app', '--entrypoint', 'python', 'backend',
+                '/tmp/authenticated-compose-smoke-helper.py', 'verify-evidence',
+                '--organization-a', $OrganizationA
+            )
+            Invoke-Docker -Arguments $evidenceVerifyArgs -Operation 'evidence transactional records'
+            Write-Pass 'HTTPS evidence five operations, replay, CSRF, platform_admin denial, no-store and tenant isolation.'
+        }
         $response = Invoke-SmokeRequest -Client $AdminClient.Client -Method POST `
             -Path '/api/v1/assets' -Headers $assetHeaders -Body $assetBody
         Assert-Status $response 201 'asset idempotent replay'
@@ -567,7 +655,7 @@ catch {
     }
 }
 finally {
-    foreach ($bundle in @($AdminClient, $ViewerClient, $StaleClient)) {
+    foreach ($bundle in @($AdminClient, $ViewerClient, $StaleClient, $EvidenceClient)) {
         if ($null -ne $bundle) {
             $bundle.Client.Dispose()
             $bundle.Handler.Dispose()
@@ -599,6 +687,7 @@ finally {
     }
     $PasswordA = $null
     $PasswordB = $null
+    $PasswordEvidence = $null
     $StaleSessionToken = $null
     $EnvironmentValues = $null
 }

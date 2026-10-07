@@ -4,7 +4,7 @@ function Test-ClosurePackagePath {
     $parts = $RelativePath -split '[\\/]'
     $ExcludedDirectories = @('.git', '.venv', 'venv', 'node_modules', 'dist', 'build', '.next',
         'out', 'coverage', 'htmlcov', '.pytest_cache', '.ruff_cache', '.mypy_cache', '.cache',
-        '__pycache__', 'logs', 'tmp', 'qa_report_render',
+        '__pycache__', 'logs', 'tmp', 'qa_report_render', 'audit-results',
         'evidence-data', 'evidence-storage', 'evidence-keys')
     $ExcludedExtensions = @('.pyc', '.pyo', '.log', '.sqlite', '.sqlite3', '.db', '.pem', '.key',
         '.kek', '.evidence')
