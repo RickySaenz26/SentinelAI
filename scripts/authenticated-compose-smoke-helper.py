@@ -8,11 +8,13 @@ import sys
 from dataclasses import dataclass
 from uuid import UUID, uuid4
 
-from sqlalchemy import func, select, text
+from sqlalchemy import create_engine, func, select, text
 from sqlalchemy.engine import make_url
 from sqlalchemy.exc import DBAPIError
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, sessionmaker
 
+from app.assets.policy import LabPolicy
+from app.assets.publisher import PolicyPublisher
 from app.core.config import get_settings
 from app.identity.validation import normalize_email, validate_password
 from app.platform.crypto import hash_password
@@ -160,6 +162,50 @@ def seed() -> None:
     print(f"SMOKE_SEED_RESULT={json.dumps(result, sort_keys=True)}")
 
 
+def publish_policy() -> None:
+    _require_ephemeral_smoke_database()
+    payload = json.load(sys.stdin)
+    organization = UUID(payload["organization"])
+    policy = LabPolicy.model_validate_json(payload["policy"])
+    url = make_url(get_settings().database_url_value)
+    admin = create_engine(url)
+    name, password = "smoke_policy_" + uuid4().hex, uuid4().hex
+    publisher_engine = None
+    created = False
+    try:
+        with admin.begin() as connection:
+            connection.exec_driver_sql(
+                f"CREATE ROLE {name} LOGIN PASSWORD '{password}' NOSUPERUSER NOCREATEDB "
+                "NOCREATEROLE NOBYPASSRLS INHERIT"
+            )
+            connection.exec_driver_sql(f"GRANT sentinelai_policy_publisher TO {name}")
+            connection.execute(
+                text("INSERT INTO policy_publisher_tenants VALUES(:role,:org)"),
+                {"role": name, "org": organization},
+            )
+        created = True
+        publisher_engine = create_engine(url.set(username=name, password=password))
+        publisher = PolicyPublisher(sessionmaker(publisher_engine), organization)
+        assert publisher.inspect()["sequence"] == 0
+        result = publisher.publish(
+            policy, expected_sequence=0, publication_id=uuid4(), provenance="ephemeral-https-smoke"
+        )
+        assert result["sequence"] == 1 and not result["replayed"]
+        print("SMOKE_POLICY_PUBLICATION=PASS")
+    finally:
+        if publisher_engine is not None:
+            publisher_engine.dispose()
+        if created:
+            with admin.begin() as connection:
+                connection.execute(
+                    text("DELETE FROM policy_publisher_tenants WHERE role_name=:name"),
+                    {"name": name},
+                )
+                connection.exec_driver_sql(f"DROP ROLE {name}")
+            print("SMOKE_POLICY_CREDENTIAL_CLEANUP=PASS")
+        admin.dispose()
+
+
 def _assert_runtime_role(session: Session) -> None:
     role = session.execute(
         text(
@@ -244,6 +290,7 @@ def main() -> int:
     parser = argparse.ArgumentParser()
     subcommands = parser.add_subparsers(dest="command", required=True)
     subcommands.add_parser("seed")
+    subcommands.add_parser("publish-policy")
     evidence_parser = subcommands.add_parser("verify-evidence")
     evidence_parser.add_argument("--organization-a", required=True, type=UUID)
     verify_parser = subcommands.add_parser("verify")
@@ -254,6 +301,8 @@ def main() -> int:
     try:
         if args.command == "seed":
             seed()
+        elif args.command == "publish-policy":
+            publish_policy()
         elif args.command == "verify-evidence":
             _require_ephemeral_smoke_database()
             with get_session_factory()() as session:

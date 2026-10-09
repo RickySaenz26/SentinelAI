@@ -332,6 +332,27 @@ print('EPHEMERAL EVIDENCE PROVISIONED')
     $UserA = [string]$seed.user_a_id
     Write-Pass 'Two isolated organizations and two temporary identities were created.'
 
+    if ($Assets) {
+        $CurrentStage = 'explicit ephemeral policy publication'
+        # Administrative provisioning is confined to this uniquely named smoke DB.
+        # The helper switches to a dedicated LOGIN for the actual publication.
+        $policyPayload = @{
+            organization = $OrganizationA
+            policy = $EnvironmentValues['LAB_ASSET_POLICY_JSON']
+        } | ConvertTo-Json -Compress
+        $policyArguments = $ComposeArguments + @(
+            'run', '--rm', '-T', '--no-deps',
+            '--volume', "${HelperPath}:/tmp/authenticated-compose-smoke-helper.py:ro",
+            '--env', 'PYTHONPATH=/app', '--env', 'ENVIRONMENT=test',
+            '--entrypoint', 'python', 'migrations',
+            '/tmp/authenticated-compose-smoke-helper.py', 'publish-policy'
+        )
+        $policyPayload | & docker @policyArguments
+        if ($LASTEXITCODE -ne 0) { throw 'Ephemeral policy publication failed.' }
+        $policyPayload = $null
+        Write-Pass 'Explicit policy publication used a separate, tenant-assigned ephemeral LOGIN.'
+    }
+
     $AdminClient = New-SmokeClient -BaseUri $BaseUri
     $CurrentStage = 'unauthenticated /me rejection'
     $response = Invoke-SmokeRequest -Client $AdminClient.Client -Method GET -Path '/api/v1/me'

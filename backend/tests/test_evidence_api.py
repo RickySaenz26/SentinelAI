@@ -52,6 +52,35 @@ def present(client, api, **changes):
     return response
 
 
+def test_replay_after_readmission_is_historical_not_authority(api, client, publish_policy):
+    _, path = stored(client, api)
+    publish_policy({**evidence_tests.POLICY, "allowed_targets": []})
+    publish_policy(evidence_tests.POLICY)
+    response = present(client, api)
+    assert response.status_code == 409 and response.json()["error"]["code"] == "ADMISSION_CHANGED"
+    assert client.get(path + "/content").status_code == 200
+    assert present(client, api, **{"Idempotency-Key": "new-generation"}).status_code == 201
+
+
+def test_withdrawal_after_commit_before_response_is_revalidated(
+    api, client, publish_policy, monkeypatch
+):
+    original = EvidenceService.submit
+
+    def change_after_commit(writer, *args, **kwargs):
+        receipt = original(writer, *args, **kwargs)
+        publish_policy({**evidence_tests.POLICY, "allowed_targets": []})
+        return receipt
+
+    monkeypatch.setattr(EvidenceService, "submit", change_after_commit)
+    assert present(client, api).status_code == 403
+    # The commit remains historical; no compensation removes evidence or its receipt.
+    listing = client.get(api["path"]).json()
+    assert len(listing["items"]) == 1
+    path = api["path"] + "/" + listing["items"][0]["id"]
+    assert client.get(path + "/content").status_code == 200
+
+
 def stored(client, api):
     response = present(client, api)
     assert response.status_code == 201, response.text
@@ -377,13 +406,13 @@ def test_read_failure_never_delivers_plaintext(
         )
 
 
-def test_policy_archive_retention_and_pagination(api, client, admin_engine, monkeypatch):
+def test_policy_archive_retention_and_pagination(api, client, admin_engine, publish_policy):
     _, path = stored(client, api)
     assert present(client, api, **{"Idempotency-Key": "second"}).json()["version"] == 2
     page = client.get(api["path"], params={"limit": 1}).json()
     assert page["next_version"] == 1
     assert client.get(api["path"], params={"after_version": 1}).json()["items"][0]["version"] == 2
-    monkeypatch.delenv("LAB_ASSET_POLICY_JSON")
+    publish_policy({**evidence_tests.POLICY, "allowed_targets": []})
     assert present(client, api).status_code == 403
     assert client.get(path + "/content").status_code == 200
     with admin_engine.begin() as db:

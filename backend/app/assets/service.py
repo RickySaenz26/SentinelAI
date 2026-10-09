@@ -8,7 +8,7 @@ from uuid import UUID
 
 from sqlalchemy.orm import Session
 
-from app.assets.policy import LabPolicy
+from app.assets.authority import require_admission, require_target
 from app.assets.repository import AssetRepository
 from app.assets.schemas import AssetArchive, AssetCreate, AssetPatch, AssetResponse
 from app.authorization.membership_policy import lock_organization
@@ -82,13 +82,10 @@ class AssetService:
             payload={"version": asset.version},
         )
 
-    def create(self, payload: AssetCreate, key: str, policy: LabPolicy | None):
+    def create(self, payload: AssetCreate, key: str):
         self.authorize("create")
         # Policy is checked even before replay: platform:admin never bypasses it.
-        if policy is None or not policy.permits(payload.target):
-            raise ApplicationError(
-                "LAB_POLICY_DENIED", "Objetivo no permitido por la política.", 403
-            )
+        policy = require_target(self.session, self.actor.organization_id, payload.target).policy
         replay = HttpReplay(
             self.session,
             self.actor,
@@ -100,6 +97,7 @@ class AssetService:
         body = replay.replay()
         if body is not None:
             self.find(UUID(str(body["id"])))
+            require_admission(self.session, self.actor.organization_id, UUID(str(body["id"])))
             return body, True
         if self.repository.target_exists(payload.target):
             raise ApplicationError("ASSET_ALREADY_EXISTS", "El activo ya está registrado.", 409)

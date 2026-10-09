@@ -32,8 +32,10 @@ BODY = {"type": "ipv4", "target": TARGET, "display_name": "Synthetic lab", "crit
 
 
 @pytest.fixture
-def policy(monkeypatch):
+def policy(monkeypatch, publish_policy, seeded):
     monkeypatch.setenv("LAB_ASSET_POLICY_JSON", json.dumps(POLICY))
+    publish_policy(POLICY)
+    publish_policy(POLICY, organization_id=seeded["org_b"])
 
 
 def create(client, auth, *, key="create-1", body=None):
@@ -81,14 +83,14 @@ def test_missing_empty_invalid_policy_denies_even_platform_admin(client, login, 
         "255.255.255.255",
     ],
 )
-def test_exclusions_and_hard_denials(client, login, monkeypatch, target):
+def test_exclusions_and_hard_denials(client, login, publish_policy, target):
     values = {**POLICY, "allowed_targets": [TARGET, target]}
-    monkeypatch.setenv("LAB_ASSET_POLICY_JSON", json.dumps(values))
+    publish_policy(values)
     response = create(client, login(), body={**BODY, "target": target})
     # A private address needs explicit permission; remove it to prove deny-by-default.
     if target == "10.0.0.1":
         assert response.status_code == 201
-        monkeypatch.setenv("LAB_ASSET_POLICY_JSON", json.dumps(POLICY))
+        publish_policy(POLICY)
         response = create(client, login(), body={**BODY, "target": target})
     assert response.status_code == 403
 
@@ -160,7 +162,7 @@ def test_role_matrix(client, login, policy, role, expected):
 
 
 def test_asset_lifecycle_audit_replay_and_policy_removal(
-    client, login, policy, monkeypatch, db, seeded
+    client, login, policy, publish_policy, db, seeded
 ):
     auth = login()
     response = create(client, auth)
@@ -181,7 +183,7 @@ def test_asset_lifecycle_audit_replay_and_policy_removal(
         ).status_code
         == 409
     )
-    monkeypatch.delenv("LAB_ASSET_POLICY_JSON")
+    publish_policy({**POLICY, "allowed_targets": []})
     assert create(client, auth).status_code == 403
     changed = client.patch(
         path,
@@ -348,7 +350,7 @@ def test_two_tenants_never_share_resources_or_replay(client, login, policy, seed
         assert created.status_code == 201 and created.json()["id"] != asset["id"]
 
 
-def test_quota_and_expired_key_reuse(client, login, policy, admin_engine, monkeypatch):
+def test_quota_and_expired_key_reuse(client, login, policy, admin_engine, publish_policy):
     auth = login()
     asset = create(client, auth).json()
     with admin_engine.begin() as connection:
@@ -360,7 +362,7 @@ def test_quota_and_expired_key_reuse(client, login, policy, admin_engine, monkey
         )
     changed = create(client, auth, body={**BODY, "target": OTHER})
     assert changed.status_code == 201 and changed.json()["id"] != asset["id"]
-    monkeypatch.setenv("LAB_ASSET_POLICY_JSON", json.dumps({**POLICY, "excluded_targets": []}))
+    publish_policy({**POLICY, "excluded_targets": []})
     assert (
         create(client, auth, key="limit", body={**BODY, "target": EXCLUDED}).json()["error"]["code"]
         == "ASSET_LIMIT_REACHED"
@@ -594,11 +596,9 @@ def test_actor_scoped_keys_and_recreate_after_archive(client, login, policy):
     assert replacement.status_code == 201 and replacement.json()["id"] != first["id"]
 
 
-def test_concurrent_quota_and_archive(client, login, policy, monkeypatch):
+def test_concurrent_quota_and_archive(client, login, policy, publish_policy):
     auth = login()
-    monkeypatch.setenv(
-        "LAB_ASSET_POLICY_JSON", json.dumps({**POLICY, "max_active_assets_per_tenant": 1})
-    )
+    publish_policy({**POLICY, "max_active_assets_per_tenant": 1})
 
     def post(target):
         with TestClient(app, base_url="https://testserver") as concurrent:

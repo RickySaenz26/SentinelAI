@@ -33,6 +33,7 @@ def main() -> int:
         "alembic/versions/20260924_05_lab_assets.py",
         "alembic/versions/20261005_06_evidence_operations.py",
         "alembic/versions/20261006_07_evidence_api_permissions.py",
+        "alembic/versions/20261007_08_persistent_lab_policy.py",
         "quality_gate.py",
     ]
     results = [
@@ -50,6 +51,7 @@ def main() -> int:
     else:
         results.append(False)
     results.append(run(["pip-audit", "--version"]))
+    results.append(run(["pip", "check"]))
     results.append(run(["pip-audit", "--progress-spinner=off", "-r", "requirements.txt"]))
     return 0 if all(results) else 1
 

@@ -52,11 +52,16 @@ pytest/Ruff/pip-audit.
 
 ## Evidencia y colaboración
 
+Sprint 2A, política persistente y admisiones: [guía operacional 4A](docs/engineering/SPRINT_2A_INCREMENT_2_STAGE_4A.md)
+y [handoff verificable](docs/engineering/SPRINT_2A_INCREMENT_2_STAGE_4A_HANDOFF.md).
+Sin política publicada en PostgreSQL se deniegan altas y presentaciones nuevas;
+`LAB_ASSET_POLICY_JSON` ya no configura la autoridad del runtime.
+
 Consulta [el handoff de cierre](WORK_HANDOFF_SPRINT_1B1_CLOSURE.md),
 [la evidencia de remediación](docs/engineering/SPRINT_1B1_REMEDIATION_REPORT.md),
 [la guía PowerShell](docs/engineering/SPRINT_1B_OPERATIONS.md) y
 [la prueba automatizada de convergencia](backend/tests/test_migration_convergence.py).
-Solo los informes de cierre describen el estado actual. Los informes Sprint 0,
+Los handoffs por etapa distinguen implementación, pruebas y pendientes. Los informes Sprint 0,
 1A, 1B y el DOCX Remediation anterior son antecedentes, no evidencia de aprobación.
 
 Para detener sin borrar datos: `docker compose down`.

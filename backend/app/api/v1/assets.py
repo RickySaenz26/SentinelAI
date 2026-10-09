@@ -7,8 +7,6 @@ from fastapi import APIRouter, Depends, Header, Query, Request, Response
 from sqlalchemy.orm import Session
 
 from app.api.v1.dependencies import get_actor
-from app.assets.configuration import get_lab_policy
-from app.assets.policy import LabPolicy
 from app.assets.schemas import (
     AssetArchive,
     AssetCreate,
@@ -62,7 +60,6 @@ def create_asset(
     response: Response,
     idempotency_key: IdempotencyKey,
     service: AssetService = Depends(get_service),
-    policy: LabPolicy | None = Depends(get_lab_policy),
 ):
     """Register an unverified lab asset; never contact it or authorize scanning.
 
@@ -70,7 +67,7 @@ def create_asset(
     returns the original response (not current state); use GET to refresh it.
     Current session, permission, CSRF and policy are checked before replay.
     """
-    body, replayed = service.create(payload, idempotency_key, policy)
+    body, replayed = service.create(payload, idempotency_key)
     response.headers["Idempotency-Replayed"] = str(replayed).lower()
     return body
 

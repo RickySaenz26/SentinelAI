@@ -51,7 +51,7 @@ def maintenance_engine(admin_engine):
 
 
 @pytest.fixture
-def setup(client, login, seeded, runtime_engine, maintenance_engine, admin_engine, monkeypatch):
+def setup(client, login, seeded, runtime_engine, maintenance_engine, admin_engine, publish_policy):
     with admin_engine.begin() as connection:
         connection.execute(
             text(
@@ -60,7 +60,7 @@ def setup(client, login, seeded, runtime_engine, maintenance_engine, admin_engin
             ),
             {"role": maintenance_engine.url.username, "org": seeded["org_a"]},
         )
-    monkeypatch.setenv("LAB_ASSET_POLICY_JSON", json.dumps(POLICY))
+    publish_policy(POLICY)
     auth = login()
     response = create(client, auth)
     assert response.status_code == 201, response.text
@@ -135,6 +135,21 @@ def snapshot(admin_engine):
     return rows, quota, counts
 
 
+def test_unrelated_policy_change_during_io_keeps_generation(setup, publish_policy, monkeypatch):
+    service, credentials, args, _, _ = setup
+    original = service.storage.write
+
+    def change_quota(prepared):
+        receipt = original(prepared)
+        publish_policy({**POLICY, "max_active_assets_per_tenant": 9})
+        return receipt
+
+    monkeypatch.setattr(service.storage, "write", change_quota)
+    receipt = service.submit(credentials, **args)
+    assert receipt.context.asset_id == args["asset_id"]
+    assert service.submit(credentials, **args) == receipt
+
+
 def expire(admin_engine):
     # Fault injection only in guarded closure_test databases; restore trigger atomically.
     with admin_engine.begin() as connection:
@@ -204,7 +219,7 @@ def test_invalid_arguments_do_not_reserve(setup, admin_engine, field, value):
 @pytest.mark.parametrize(
     "kind", ["csrf", "session", "permission", "asset", "version", "policy", "next-version"]
 )
-def test_reservation_revalidates_inputs(setup, admin_engine, login, monkeypatch, kind):
+def test_reservation_revalidates_inputs(setup, admin_engine, login, publish_policy, kind):
     service, credentials, args, _, _ = setup
     if kind == "csrf":
         credentials = SessionCredentials(credentials.token, "invalid")
@@ -220,7 +235,7 @@ def test_reservation_revalidates_inputs(setup, admin_engine, login, monkeypatch,
     elif kind == "next-version":
         args = {**args, "version": 2}
     else:
-        monkeypatch.delenv("LAB_ASSET_POLICY_JSON")
+        publish_policy({**POLICY, "allowed_targets": []})
     with pytest.raises(ApplicationError):
         service.submit(credentials, **args)
     assert snapshot(admin_engine)[0] == []
@@ -310,7 +325,7 @@ def test_storage_and_event_failures_roll_back_acceptance(setup, admin_engine, mo
     "change", ["session", "membership", "archive", "policy", "policy-hash", "expiry"]
 )
 def test_authorization_change_during_io_prevents_confirmation(
-    setup, admin_engine, monkeypatch, change
+    setup, admin_engine, monkeypatch, publish_policy, change
 ):
     service, credentials, args, maintenance, root = setup
     original = service.storage.write
@@ -335,11 +350,11 @@ def test_authorization_change_during_io_prevents_confirmation(
                     )
                 )
         if change == "policy":
-            monkeypatch.delenv("LAB_ASSET_POLICY_JSON")
+            publish_policy({**POLICY, "allowed_targets": []})
         elif change == "policy-hash":
-            monkeypatch.setenv(
-                "LAB_ASSET_POLICY_JSON", json.dumps({**POLICY, "max_active_assets_per_tenant": 3})
-            )
+            # Same final hash, different generation, without intermediate reads.
+            publish_policy({**POLICY, "allowed_targets": []})
+            publish_policy(POLICY)
         elif change == "expiry":
             expire(admin_engine)
         return receipt
@@ -636,7 +651,7 @@ def unreferenced_committed_operation(setup, admin_engine):
 
 @pytest.mark.parametrize("substitution", ["tenant", "asset", "version"])
 def test_reference_substitution_reaches_composite_fk(
-    unreferenced_committed_operation, admin_engine, seeded, substitution
+    unreferenced_committed_operation, admin_engine, seeded, publish_policy, substitution
 ):
     row = unreferenced_committed_operation
     insert_reference = text(
@@ -654,6 +669,7 @@ def test_reference_substitution_reaches_composite_fk(
         attempted["asset"] = uuid4()
         if substitution == "tenant":
             attempted["org"] = seeded["org_b"]
+            publish_policy(POLICY, organization_id=seeded["org_b"])
         with admin_engine.begin() as connection:
             connection.execute(
                 text(
@@ -718,9 +734,10 @@ def test_maintenance_cli_inspection_and_sanitized_failure(
 
 
 def test_same_replay_key_is_scoped_by_authenticated_tenant(
-    setup, client, create_user, seeded, admin_engine
+    setup, client, create_user, seeded, admin_engine, publish_policy
 ):
     service, credentials, args, _, _ = setup
+    publish_policy(POLICY, organization_id=seeded["org_b"])
     first = service.submit(credentials, **args)
     owner = create_user(role="org_owner", organization_id=seeded["org_b"])
     response = client.post(
@@ -753,9 +770,10 @@ def test_same_replay_key_is_scoped_by_authenticated_tenant(
 
 
 def test_database_fks_reject_mixed_identities_and_unaccepted_references(
-    setup, admin_engine, monkeypatch, seeded
+    setup, admin_engine, monkeypatch, seeded, publish_policy
 ):
     service, credentials, args, _, _ = setup
+    publish_policy(POLICY, organization_id=seeded["org_b"])
     with monkeypatch.context() as patch:
         patch.setattr(
             service_module, "emit_event", lambda *a, **kw: (_ for _ in ()).throw(OSError())
@@ -782,7 +800,7 @@ def test_database_fks_reject_mixed_identities_and_unaccepted_references(
                 "criticality,policy_hash) "
                 "VALUES(:id,:org,'192.0.2.10','Other','low',:hash)"
             ),
-            {"id": other_asset, "org": seeded["org_b"], "hash": "a" * 64},
+            {"id": other_asset, "org": seeded["org_b"], "hash": row["policy_hash"]},
         )
     for changes in (
         {"asset_id": other_asset},
@@ -797,6 +815,7 @@ def test_database_fks_reject_mixed_identities_and_unaccepted_references(
             "membership_id",
             "session_id",
             "asset_version",
+            "admission_generation",
             "version",
             "policy_hash",
             "key_hash",

@@ -73,6 +73,9 @@ def test_assets_upgrade_from_populated_04_and_reversible_empty_inventory(admin_e
             assert result.returncode == 0, result.stderr
             _run_alembic_upgrade(BACKEND_ROOT, existing)
             assert _schema_snapshot(fresh) == _schema_snapshot(existing)
+            # Seed historical inventory at 07, before policy publication is mandatory.
+            result = revision(existing, "downgrade", "20261006_07")
+            assert result.returncode == 0, result.stderr
             with engine.begin() as conn:
                 conn.execute(
                     text(
@@ -82,6 +85,7 @@ def test_assets_upgrade_from_populated_04_and_reversible_empty_inventory(admin_e
                     ),
                     {"org": identifier, "hash": "a" * 64},
                 )
+            _run_alembic_upgrade(BACKEND_ROOT, existing)
             with engine.connect() as conn:
                 before_revision = conn.scalar(text("SELECT version_num FROM alembic_version"))
             refused = revision(existing, "downgrade", "20260920_04")

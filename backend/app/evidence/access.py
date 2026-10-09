@@ -4,6 +4,7 @@ from datetime import UTC, datetime, timedelta
 
 from sqlalchemy import select, text
 
+from app.assets.authority import require_admission
 from app.evidence.service import EvidenceService, fail, receipt_from
 from app.platform.database.models import Asset
 from app.security_audit.service import record_event
@@ -197,4 +198,9 @@ class EvidenceAccess:
                 {"org": actor.organization_id, "object": receipt.object_id},
             )
             row = self.row(session, actor, False, asset_id, evidence_id)
+            if row["admission_generation"] is None:
+                fail("ADMISSION_CHANGED")
+            require_admission(
+                session, actor.organization_id, asset_id, generation=row["admission_generation"]
+            )
             return self.metadata(row), writer.replayed

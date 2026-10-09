@@ -1,5 +1,9 @@
 # Sprint 2A — incremento 1: política local e inventario
 
+Nota de evolución: la configuración de proceso descrita abajo es histórica.
+Desde [etapa 4A](SPRINT_2A_INCREMENT_2_STAGE_4A.md), la autoridad es una política
+publicada en PostgreSQL; la variable de entorno solo alimenta el CLI del operador.
+
 Estado: implementación para revisión humana en `feature/sprint-2a-assets-scope`,
 desde `55022c4eff2bc527c834edd0c43b130ecd60ddd0`. No es cierre de todo Sprint 2A,
 aprobación para producción ni autorización para redes reales de SENATI.

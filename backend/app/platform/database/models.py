@@ -261,7 +261,7 @@ class OutboxEvent(Base):
         DateTime(timezone=True), nullable=False, default=utcnow
     )
     published_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
-    attempts: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    attempts: Mapped[int] = mapped_column(Integer, nullable=False, server_default="0")
 
     __table_args__ = (
         Index(

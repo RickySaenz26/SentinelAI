@@ -7,8 +7,10 @@ import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy import create_engine, select, text
 from sqlalchemy.engine import make_url
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, sessionmaker
 
+from app.assets.policy import LabPolicy
+from app.assets.publisher import PolicyPublisher
 from app.core.config import get_settings
 from app.core.rate_limit import reset_rate_limits
 from app.main import app
@@ -25,6 +27,51 @@ from app.platform.database.models import (
 from app.platform.database.session import dispose_engine_for_tests, get_engine
 
 PASSWORD = "Closure test password 42!"
+
+
+@pytest.fixture(scope="session")
+def publisher_engine(admin_engine):
+    name, password = "policy_test_" + uuid4().hex, uuid4().hex
+    with admin_engine.begin() as connection:
+        connection.exec_driver_sql(
+            f"CREATE ROLE {name} LOGIN PASSWORD '{password}' NOSUPERUSER NOCREATEDB "
+            "NOCREATEROLE NOBYPASSRLS INHERIT"
+        )
+        connection.exec_driver_sql(f"GRANT sentinelai_policy_publisher TO {name}")
+    engine = create_engine(admin_engine.url.set(username=name, password=password))
+    yield engine
+    engine.dispose()
+    with admin_engine.begin() as connection:
+        connection.execute(
+            text("DELETE FROM policy_publisher_tenants WHERE role_name=:name"), {"name": name}
+        )
+        connection.exec_driver_sql(f"DROP ROLE {name}")
+
+
+@pytest.fixture
+def publish_policy(admin_engine, publisher_engine, seeded):
+    import json
+
+    with admin_engine.begin() as connection:
+        for org in (seeded["org_a"], seeded["org_b"]):
+            connection.execute(
+                text("INSERT INTO policy_publisher_tenants VALUES(:role,:org)"),
+                {"role": publisher_engine.url.username, "org": org},
+            )
+
+    def publish(values, *, organization_id=None):
+        publisher = PolicyPublisher(
+            sessionmaker(publisher_engine), organization_id or seeded["org_a"]
+        )
+        policy = LabPolicy.model_validate_json(json.dumps(values))
+        return publisher.publish(
+            policy,
+            expected_sequence=publisher.inspect()["sequence"],
+            publication_id=uuid4(),
+            provenance="synthetic-fixture",
+        )
+
+    return publish
 
 
 @pytest.fixture(scope="session")

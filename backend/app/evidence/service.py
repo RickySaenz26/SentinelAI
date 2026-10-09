@@ -13,7 +13,7 @@ from sqlalchemy import select, text
 from starlette.requests import Request
 
 from app.api.v1.dependencies import SESSION_COOKIE, get_actor
-from app.assets.configuration import get_lab_policy
+from app.assets.authority import require_admission
 from app.core.errors import ApplicationError
 from app.evidence.contracts import (
     EvidenceContext,
@@ -71,8 +71,8 @@ def receipt_from(row) -> ObjectReceipt:
 
 
 class EvidenceService:
-    def __init__(self, sessions, storage, *, policy_provider=get_lab_policy):
-        self.sessions, self.storage, self.policy_provider = sessions, storage, policy_provider
+    def __init__(self, sessions, storage):
+        self.sessions, self.storage = sessions, storage
 
     @staticmethod
     def commit(session, phase):
@@ -106,10 +106,8 @@ class EvidenceService:
             fail("ASSET_NOT_FOUND", 404)
         if asset.deleted_at is not None or asset.version != asset_version:
             fail("VERSION_CONFLICT")
-        policy = self.policy_provider()
-        if policy is None or not policy.permits(asset.canonical_target):
-            fail("LAB_POLICY_DENIED", 403)
-        return actor, policy.fingerprint
+        published, generation = require_admission(session, actor.organization_id, asset_id)
+        return actor, (published.policy.fingerprint, generation)
 
     @staticmethod
     def quota(session, organization_id):
@@ -148,7 +146,7 @@ class EvidenceService:
             or row["actor_id"] != actor.user_id
             or row["session_id"] != actor.session_id
             or row["membership_id"] != actor.membership_id
-            or row["policy_hash"] != policy_hash
+            or row["admission_generation"] != policy_hash[1]
         ):
             fail("EVIDENCE_RESERVATION_INVALID")
 
@@ -185,6 +183,8 @@ class EvidenceService:
                     previous = self.operation(session, org, UUID(pointer["operation_id"]))
                     if previous["state"] != "committed":
                         fail("EVIDENCE_OPERATION_PENDING")
+                    if previous["admission_generation"] != policy_hash[1]:
+                        fail("ADMISSION_CHANGED")
                     return previous, True
                 # Only new submissions apply observation freshness. A replay has a
                 # fixed 24-hour HTTP lifetime, even when its observation is older.
@@ -214,6 +214,8 @@ class EvidenceService:
                 if previous["fingerprint"] != fingerprint:
                     fail("IDEMPOTENCY_CONFLICT")
                 if previous["state"] == "committed":
+                    if previous["admission_generation"] != policy_hash[1]:
+                        fail("ADMISSION_CHANGED")
                     return dict(previous), True
                 fail("EVIDENCE_OPERATION_PENDING")
             if (
@@ -245,9 +247,10 @@ class EvidenceService:
                     text(
                         "INSERT INTO evidence_operations(id,organization_id,asset_id,actor_id,"
                         "membership_id,session_id,asset_version,version,policy_hash,"
-                        "key_hash,fingerprint,expires_at) "
+                        "key_hash,fingerprint,admission_generation,expires_at) "
                         "VALUES(:id,:org,:asset,:actor,:membership,:session,:asset_version,:version,"
-                        ":policy,:key,:fingerprint,clock_timestamp()+interval '5 minutes') "
+                        ":policy,:key,:fingerprint,:generation,"
+                        "clock_timestamp()+interval '5 minutes') "
                         "RETURNING *"
                     ),
                     {
@@ -259,7 +262,8 @@ class EvidenceService:
                         "session": actor.session_id,
                         "asset_version": asset_version,
                         "version": version,
-                        "policy": policy_hash,
+                        "policy": policy_hash[0],
+                        "generation": policy_hash[1],
                         "key": key_hash,
                         "fingerprint": fingerprint,
                     },

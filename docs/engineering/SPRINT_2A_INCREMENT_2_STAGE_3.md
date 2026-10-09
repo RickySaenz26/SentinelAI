@@ -1,5 +1,9 @@
 # Etapa 3 — contrato de presentación y lectura autorizada
 
+Evolución posterior: [etapa 4A](SPRINT_2A_INCREMENT_2_STAGE_4A.md) sustituye la
+autoridad de política del proceso por revisiones persistidas y generaciones de
+admisión. Mantiene los cinco endpoints y las restricciones de lectura de esta etapa.
+
 Contrato definido antes de implementar, 2026-10-06 (America/Lima).
 Checkpoint: 320e66dea0276df6330a77556bdc2e2088976ea1, rama
 feature/sprint-2a-assets-scope; árbol e índice limpios y origin local coincidente.

@@ -51,6 +51,9 @@ def test_evidence_upgrade_from_populated_05_and_safe_downgrade(admin_engine):
                 )
             _run_alembic_upgrade(BACKEND_ROOT, existing)
             assert _schema_snapshot(fresh) == _schema_snapshot(existing)
+            # Prepare a genuine pre-08 operation, not a new unbound post-08 operation.
+            result = revision(existing, "downgrade", "20261006_07")
+            assert result.returncode == 0, result.stderr
             with engine.begin() as connection:
                 connection.execute(
                     text(
@@ -87,6 +90,7 @@ def test_evidence_upgrade_from_populated_05_and_safe_downgrade(admin_engine):
                         "hash": "b" * 64,
                     },
                 )
+            _run_alembic_upgrade(BACKEND_ROOT, existing)
             with engine.connect() as connection:
                 before_revision = connection.scalar(text("SELECT version_num FROM alembic_version"))
             result = revision(existing, "downgrade", "20260924_05")

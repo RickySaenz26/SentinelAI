@@ -11,7 +11,9 @@ def test_permission_upgrade_and_downgrade_preserve_schema(admin_engine):
         url = urls[0]
         assert revision(url, "upgrade", "20261005_06").returncode == 0
         before = _schema_snapshot(url)
-        assert revision(url, "upgrade", "head").returncode == 0
+        # This contract belongs specifically to 07, which changes permission data only.
+        # 08 intentionally adds schema and has independent convergence/preservation tests.
+        assert revision(url, "upgrade", "20261006_07").returncode == 0
         assert _schema_snapshot(url) == before
         engine = create_engine(url)
         query = text(
