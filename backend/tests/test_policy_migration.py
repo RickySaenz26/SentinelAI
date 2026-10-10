@@ -169,6 +169,9 @@ def test_populated_07_preserves_evidence_and_downgrade_preserves_publication(
                 publication_id=uuid4(),
                 provenance="populated-07-fixture",
             )
+            # Pin the historical refusal at 08 after removing empty later revisions.
+            result = revision(old, "downgrade", "20261007_08")
+            assert result.returncode == 0, result.stderr
             refused = revision(old, "downgrade", "20261006_07")
             assert refused.returncode != 0 and "refuses published policy history" in refused.stderr
             with engine.connect() as db:

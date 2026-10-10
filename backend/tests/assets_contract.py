@@ -9,9 +9,15 @@ def assets_contract(
     *,
     prefix="/api/v1/assets",
     title="SentinelAI laboratory assets — increment 1",
+    selected_paths=None,
 ) -> dict:
+    if selected_paths is None and prefix == "/api/v1/assets":
+        # Preserve the five original operations. 4B subresources have their own freeze.
+        selected_paths = {"/api/v1/assets", "/api/v1/assets/{asset_id}"}
     paths = deepcopy(
-        {key: value for key, value in document["paths"].items() if key.startswith(prefix)}
+        {key: value for key, value in document["paths"].items() if key in selected_paths}
+        if selected_paths is not None
+        else {key: value for key, value in document["paths"].items() if key.startswith(prefix)}
     )
     references: set[str] = set()
 

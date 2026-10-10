@@ -4,10 +4,12 @@ param(
     [ValidateRange(60, 300)]
     [int]$TimeoutSeconds = 180,
     [switch]$Assets,
-    [switch]$Evidence
+    [switch]$Evidence,
+    [switch]$ControlReviews
 )
 
 $ErrorActionPreference = 'Stop'
+if ($ControlReviews) { $Evidence = $true }
 if ($Evidence) { $Assets = $true }
 $RepositoryRoot = (Resolve-Path -LiteralPath (Split-Path -Parent $PSScriptRoot)).Path
 $BaseComposePath = Join-Path $RepositoryRoot 'compose.yaml'
@@ -218,6 +220,11 @@ $EmailA = "smoke-admin-$runId@example.com"
 $EmailB = "smoke-viewer-$runId@example.com"
 $EmailEvidence = "smoke-evidence-$runId@example.com"
 $PasswordEvidence = "Ec3!$(Get-RandomHex -ByteCount 24)"
+$ReviewAccounts = if ($ControlReviews) {
+    @(foreach ($label in @('b', 'c')) {
+        @{ email = "smoke-review-$label-$runId@example.com"; password = "Rv4!$(Get-RandomHex -ByteCount 24)" }
+    })
+} else { @() }
 $EnvironmentValues = @{
     COMPOSE_PROJECT_NAME = $ProjectName
     SMOKE_PROJECT_NAME = $ProjectName
@@ -263,6 +270,7 @@ $AdminClient = $null
 $ViewerClient = $null
 $StaleClient = $null
 $EvidenceClient = $null
+$ReviewClients = @()
 $CurrentStage = 'initialization'
 
 try {
@@ -312,6 +320,7 @@ print('EPHEMERAL EVIDENCE PROVISIONED')
         b_password = $PasswordB
         evidence_owner_email = if ($Evidence) { $EmailEvidence } else { '' }
         evidence_owner_password = if ($Evidence) { $PasswordEvidence } else { '' }
+        control_reviewers = $ReviewAccounts
     } | ConvertTo-Json -Compress
     $seedArguments = $ComposeArguments + @(
         'run', '--rm', '-T', '--no-deps',
@@ -590,6 +599,10 @@ print('EPHEMERAL EVIDENCE PROVISIONED')
             )
             Invoke-Docker -Arguments $evidenceVerifyArgs -Operation 'evidence transactional records'
             Write-Pass 'HTTPS evidence five operations, replay, CSRF, platform_admin denial, no-store and tenant isolation.'
+            if ($ControlReviews) {
+                $CurrentStage = 'technical control HTTPS with presenter A and reviewers B/C'
+                . (Join-Path $PSScriptRoot 'control-review-smoke.ps1')
+            }
         }
         $response = Invoke-SmokeRequest -Client $AdminClient.Client -Method POST `
             -Path '/api/v1/assets' -Headers $assetHeaders -Body $assetBody
@@ -676,7 +689,7 @@ catch {
     }
 }
 finally {
-    foreach ($bundle in @($AdminClient, $ViewerClient, $StaleClient, $EvidenceClient)) {
+    foreach ($bundle in (@($AdminClient, $ViewerClient, $StaleClient, $EvidenceClient) + $ReviewClients)) {
         if ($null -ne $bundle) {
             $bundle.Client.Dispose()
             $bundle.Handler.Dispose()
@@ -709,6 +722,7 @@ finally {
     $PasswordA = $null
     $PasswordB = $null
     $PasswordEvidence = $null
+    $ReviewAccounts = $null
     $StaleSessionToken = $null
     $EnvironmentValues = $null
 }

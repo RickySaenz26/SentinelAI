@@ -112,6 +112,7 @@ def create_app() -> FastAPI:
                     path != "/api/v1/assets"
                     and not path.startswith("/api/v1/assets/")
                     and not path.startswith("/api/v1/evidence/")
+                    and not path.startswith("/api/v1/control-reviews/")
                 ):
                     continue
                 for method, operation in operations.items():

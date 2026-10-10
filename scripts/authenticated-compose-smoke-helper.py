@@ -151,6 +151,23 @@ def seed() -> None:
             session.add(Membership(organization_id=org_a, user_id=owner.id, role_id=role.id))
             session.commit()
 
+        for reviewer in payload.get("control_reviewers") or []:
+            set_organization_context(session, org_a)
+            user = User(email=normalize_email(reviewer["email"]), display_name="Test reviewer")
+            session.add(user)
+            session.flush()
+            validate_password(reviewer["password"])
+            session.add(
+                PasswordCredential(
+                    user_id=user.id, password_hash=hash_password(reviewer["password"])
+                )
+            )
+            role = session.scalar(
+                select(Role).where(Role.code == "security_manager", Role.is_system)
+            )
+            session.add(Membership(organization_id=org_a, user_id=user.id, role_id=role.id))
+            session.commit()
+
     result = {
         "organization_a_id": str(org_a),
         "organization_b_id": str(org_b),

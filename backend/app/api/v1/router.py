@@ -3,6 +3,7 @@ from fastapi import APIRouter
 from app.api.v1 import (
     account_recovery,
     assets,
+    control_reviews,
     evidence,
     health,
     me,
@@ -17,6 +18,7 @@ api_router = APIRouter()
 api_router.include_router(health.router, tags=["health"])
 api_router.include_router(assets.router, tags=["assets"])
 api_router.include_router(evidence.router, tags=["evidence"])
+api_router.include_router(control_reviews.router, tags=["control-reviews"])
 api_router.include_router(session.router, tags=["session"])
 api_router.include_router(account_recovery.router, tags=["account-recovery"])
 api_router.include_router(me.router, tags=["me"])
